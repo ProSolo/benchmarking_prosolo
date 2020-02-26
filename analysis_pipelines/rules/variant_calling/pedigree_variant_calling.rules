@@ -1,0 +1,563 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+Rules to perform variant calling on multiple samples from a known pedigree.
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+TODO: document necessary configs
+
+"""
+
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+def _sample_to_runs(sample):
+    return config["samples"][sample]
+
+# create "folders" keyword and subkeywords data
+config.setdefault("folders", {})
+config["folders"].setdefault("data", "data")
+
+# tmp folder definition for the local system, will default to "/local/tmp"
+tmp = config["folders"].get("tmp", "/local/tmp")
+
+# get or set empty settings in config and config.settings
+config.setdefault("settings", {})
+#
+# get chromosome file if defined in config.json, set to undefined otherwise
+# the file should contain the name of one chromosome per line
+chrfile = config["references"].get("chromosomes","undefined")
+if chrfile == "undefined":
+    chrlist = ['chrM', 'chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+               'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+               'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+               'chr22', 'chrX', 'chrY']
+else:
+    chrlist = open(chrfile).read().splitlines()
+
+
+rule gatk_snps_only_for_pedigree:
+    """
+    This rule is the result of a game of whack a mole with GATK 3.6 and
+    the polymutt and FamSeq VCF parsers. 
+    """
+    input: tmp + "/variant_calling/{reference}/{unit}.{chr}.gatk.vcf"
+    output: tmp + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk_snps.vcf"
+    log: "log/variant_calling/{reference}/{unit}.{chr}.gatk_snps.log"
+    shell:
+        "bcftools view --types snps -O v {input} | "
+        "bcftools annotate -x FORMAT/PGT,FORMAT/PID -O v | "
+        "grep -P -v \"\t\./\.:0,0:\.:\.:\.\" >{output} " #GATK 3.6 sometimes creates corrupt FORMAT fields 
+        "2>&1 | tee {log} "
+
+
+rule polymutt:
+    """
+    polymutt produces a messed up VCF format. The following thus requires bcftools and tries to:
+    1. correct the NUMBER type of the PL and GL format fields from 3 to G
+    2. put back the dropped contig header lines, necessary for further parsing
+    """
+    input:
+        ped = config["folders"]["data"] + "/{project}.ped",
+        dat = config["folders"]["data"] + "/{project}.dat",
+        vcf = tmp + "/variant_calling/{reference}/{project}.{chr}.{pre_caller}.vcf"
+    output:
+        vcf = tmp + "/variant_calling/{reference}/{project,[^\.]+}.{chr}.{pre_caller}.polymutt.vcf"
+    params:
+        custom = config["settings"].setdefault("polymutt", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{chr}.{pre_caller}.polymutt.log"
+    threads: 8 # double of that in polymutt example on website
+    shell:
+        "polymutt "
+        "-p {input.ped} "
+        "-d {input.dat} "
+        "--in_vcf {input.vcf} "
+        "--out_vcf {output.vcf} "
+        "--nthreads {threads} "
+        "--chrX chrX "
+        "--chrY chrY "
+        "--MT chrM "
+        "{params.custom} "
+        "2>&1 | tee {log}; "
+        "head -n 5000 {output.vcf} | grep ^## | sed -r -e 's/(FORMAT=<ID=(P|G)L,Number=)3/\\1G/' >{wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.NewPolymuttHeader.txt; "
+        "head -n 5000 {input.vcf} | grep ^##contig >>{wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.NewPolymuttHeader.txt; "
+        "head -n 5000 {output.vcf} | grep ^#CHROM >>{wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.NewPolymuttHeader.txt; "
+        "bcftools reheader -h {wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.NewPolymuttHeader.txt {output.vcf} >{wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.vcf.tmp; "
+        "rm {wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.NewPolymuttHeader.txt; "
+        "mv {wildcards.project}.{wildcards.chr}.{wildcards.pre_caller}.vcf.tmp {output.vcf} "
+
+rule polymutt_chr_to_child_GT:
+    """
+    Take per chromosome polymutt family `vcf`s and turn them into one bcf file
+    only containing the child of interest and the polymutt genotype as a GT Format
+    field.
+    ATTENTION: excludes the Y chromosome, as created for female
+    """
+    input:
+        vcfs = lambda wildcards:
+                expand(tmp + "/variant_calling/{reference}/{project}.{chrom}.{pre_caller}.polymutt.vcf",
+                    reference = wildcards.reference,
+                    chrom = chrlist,
+                    project = config["project_name"],
+                    pre_caller = wildcards.pre_caller)
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.{pre_caller}.polymutt.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.{pre_caller}.polymutt.log"
+    shell:
+        "echo \"{wildcards.child} polymutt\" >variant_calling/{wildcards.reference}/{wildcards.child}.{wildcards.pre_caller}.polymutt.reheader; "
+        "bcftools concat -O v {input.vcfs} | "
+        "bcftools view -O v -s {wildcards.child} | "
+        "bcftools annotate -O v -x INFO,^FORMAT/GT | "
+        "bcftools reheader -s variant_calling/{wildcards.reference}/{wildcards.child}.{wildcards.pre_caller}.polymutt.reheader | "
+        "bcftools view -t ^chrM,chrY -O b -o {output.bcf} "
+        "2>&1 | tee {log} "
+
+
+rule polymutt_denovo:
+    """
+    polymutt produces a messed up VCF format. The following thus requires bcftools and tries to:
+    1. correct the NUMBER type of the PL and GL format fields from 3 to G
+    2. put back the dropped contig header lines, necessary for further parsing
+    """
+    input:
+        ped = config["folders"]["data"] + "/{project}.ped",
+        dat = config["folders"]["data"] + "/{project}.dat",
+        vcf = "variant_calling/{reference}/{project}.{pre_caller}.vcf"
+    output:
+        vcf = "variant_calling/{reference}/{project,[^\.]+}.{pre_caller}.polymutt_denovo.vcf"
+    params:
+        custom = config["settings"].setdefault("polymutt", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{pre_caller}.polymutt_denovo.log"
+    threads: 8 # double of that in polymutt example on website
+    shell:
+        "polymutt "
+        "-p {input.ped} "
+        "-d {input.dat} "
+        "--in_vcf {input.vcf} "
+        "--out_vcf {output.vcf} "
+        "--nthreads {threads} "
+        "--denovo "
+        "{params.custom} "
+        "2>&1 | tee {log};"
+        "head -n 5000 {output.vcf} | grep ^## | sed -r -e 's/(FORMAT=<ID=(P|G)L,Number=)3/\1G/' >{wildcards.project}.NewPolymuttDenovoHeader.txt; "
+        "head -n 5000 {input.vcf} | grep ^##contig >>{wildcards.project}.NewPolymuttDenovoHeader.txt; "
+        "head -n 5000 {output.vcf} | grep ^#CHROM >>{wildcards.project}.NewPolymuttDenovoHeader.txt; "
+        "bcftools reheader -h {wildcards.project}.NewPolymuttDenovoHeader.txt {output.vcf} >{wildcards.project}.vcf.tmp; "
+        "mv {wildcards.project}.vcf.tmp {output.vcf} "
+
+rule fam_seq_BN:
+    """
+    FamSeq vcf -method 1
+    This means using the Bayesian Network method.
+    ATTENTION: FamSeq uses a NON-STANDARD ped file including a header line...
+    ATTENTION: FamSeq introduces a trailing whitespace in the the #CHROM header
+               line, causing bcftools to choke. The sed command removes it.
+    ATTENTION: FamSeq creates header lines for FPP and GPP fields with the wrong
+               type Integer. The sed command fixes this to Float.
+    """
+    input:
+        ped = config["folders"]["data"] + "/{project}.FamSeq.ped",
+        vcf = "variant_calling/{reference}/{project}.{pre_caller}.vcf"
+    output:
+        vcf = "variant_calling/{reference}/{project,[^\.]+}.{pre_caller}.FamSeqBN.vcf"
+    params:
+        custom = config["settings"].setdefault("FamSeq", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{pre_caller}.FamSeqBN.log"
+    threads: 1
+    shell:
+        "FamSeq vcf "
+        "-vcfFile {input.vcf} "
+        "-pedFile {input.ped} "
+        "-output {output.vcf} "
+        "-method 1 "
+        "{params.custom} "
+        "2>&1 | tee {log}; "
+        "echo 'If FamSeq output is empty, check out its non-standard ped-file "
+        "format at (and make sure that you include their header line, it otherwise "
+        "ignores your first sample...): http://bioinformatics.mdanderson.org/main/FamSeq' "
+        "2>&1 | tee -a {log}; "
+        "sed -i -r -e 's/(^#CHROM.*)\s$/\\1/' "
+        " -e 's/(^##FORMAT=<ID=[GF]PP,Number=G,Type=)Integer/\\1Float/' {output.vcf} "
+        "2>&1 | tee -a {log} "
+
+rule fam_seq_ES:
+    """
+    FamSeq vcf -method 2
+    This means using the Elston-Stewart algorithm.
+    ATTENTION: FamSeq uses a NON-STANDARD ped file including a header line...
+    ATTENTION: FamSeq introduces a trailing whitespace in the the #CHROM header
+               line, causing bcftools to choke. The sed command removes it.
+    ATTENTION: FamSeq creates header lines for FPP and GPP fields with the wrong
+               type Integer. The sed command fixes this to Float.
+    """
+    input:
+        ped = config["folders"]["data"] + "/{project}.FamSeq.ped",
+        vcf = "variant_calling/{reference}/{project}.{pre_caller}.vcf"
+    output:
+        vcf = "variant_calling/{reference}/{project,[^\.]+}.{pre_caller}.FamSeqES.vcf"
+    params:
+        custom = config["settings"].setdefault("FamSeq", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{pre_caller}.FamSeqES.log"
+    threads: 1
+    shell:
+        "FamSeq vcf "
+        "-vcfFile {input.vcf} "
+        "-pedFile {input.ped} "
+        "-output {output.vcf} "
+        "-method 2 "
+        "{params.custom} "
+        "2>&1 | tee {log}; "
+        "echo 'If FamSeq output is empty, check out its non-standard ped-file "
+        "format at (and make sure that you include their header line, it otherwise "
+        "ignores your first sample...): http://bioinformatics.mdanderson.org/main/FamSeq' "
+        "2>&1 | tee -a {log}; "
+        "sed -i -r -e 's/(^#CHROM.*)\s$/\\1/' "
+        " -e 's/(^##FORMAT=<ID=[GF]PP,Number=G,Type=)Integer/\\1Float/' {output.vcf} "
+        "2>&1 | tee -a {log} "
+
+rule fam_seq_MCMC:
+    """
+    FamSeq vcf -method 3
+    This means using the Markov Chain Monte Carlo algorithm.
+    ATTENTION: FamSeq uses a NON-STANDARD ped file including a header line...
+    ATTENTION: FamSeq introduces a trailing whitespace in the the #CHROM header
+               line, causing bcftools to choke. The sed command removes it.
+    ATTENTION: FamSeq creates header lines for FPP and GPP fields with the wrong
+               type Integer. The sed command fixes this to Float.
+    ATTENTION: FamSeq creates header lines starting with ##FS that are invalid
+               VCF, so these are deleted by this rule.
+    """
+    input:
+        ped = config["folders"]["data"] + "/{project}.FamSeq.ped",
+        vcf = tmp + "/variant_calling/{reference}/{project}.{chr}.{pre_caller}.vcf"
+    output:
+        vcf = tmp + "/variant_calling/{reference}/{project,[^\.]+}.{chr}.{pre_caller}.FamSeqMCMC.vcf"
+    params:
+        custom = config["settings"].setdefault("FamSeq", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{chr}.{pre_caller}.FamSeqMCMC.log"
+    threads: 1 
+    shell:
+        "FamSeq vcf "
+        "-vcfFile {input.vcf} "
+        "-pedFile {input.ped} "
+        "-output {output.vcf}.tmp "
+        "-method 3 "
+        "{params.custom} "
+        "2>&1 | tee {log}; "
+        "echo 'If FamSeq output is empty, check out its non-standard ped-file "
+        "format at (and make sure that you include their header line, it otherwise "
+        "ignores your first sample...): http://bioinformatics.mdanderson.org/main/FamSeq' "
+        "2>&1 | tee -a {log}; "
+        "grep -v ^##FS {output.vcf}.tmp | "
+        "sed -r -e 's/(^#CHROM.*)\s$/\\1/' -e 's/:NA/:./g' "
+        " -e 's/(^##FORMAT=<ID=[GF]PP,Number=G,Type=)Integer/\\1Float/' >{output.vcf} "
+        "2>&1 | tee -a {log}; "
+        "rm {output.vcf}.tmp "
+
+rule fam_seq_MCMC_chr_to_child_GT:
+    """
+    Take FamSeq MCMC per chromosome family `vcf`s and turn them into a bcf file
+    only containing the child of interest and the FamSeq genotype (FGT) as a
+    GT Format field.
+    ATTENTION: excludes the Y chromosome, as created for female
+    """
+    input:
+        vcfs = lambda wildcards:
+                expand( tmp + "/variant_calling/{reference}/{project}.{chrom}.{pre_caller}.FamSeqMCMC.vcf",
+                    reference = wildcards.reference,
+                    chrom = chrlist,
+                    project = config["project_name"],
+                    pre_caller = wildcards.pre_caller)
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.{pre_caller}.FamSeqMCMC.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.{pre_caller}.FamSeqMCMC.log"
+    shell:
+        "echo \"{wildcards.child} FamSeq_MCMC\" >variant_calling/{wildcards.reference}/{wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.reheader; "
+        "bcftools concat -O v {input.vcfs} | "
+        "bcftools view -O v -s {wildcards.child} | "
+        "bcftools annotate -O v -x INFO,^FORMAT/FGT | "
+        "sed -e 's/^##FORMAT=<ID=FGT,Number=1,Type=String,Description=\"Genotype called by FamSeqPro\">$/##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">/' "
+        " -e 's/\tFGT\t/\tGT\t/' >{wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.tmp "
+        "2>&1 | tee {log}; "
+        "bcftools reheader "
+        " -s variant_calling/{wildcards.reference}/{wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.reheader "
+        " -o {wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.tmp.vcf "
+        " {wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.tmp "
+        "2>&1 | tee -a {log}; "
+        "bcftools view -t ^chrM,chrY -O b -o {output.bcf} {wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.tmp.vcf "
+        "2>&1 | tee -a {log}; "
+        "rm {wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.tmp; "
+        "rm {wildcards.child}.{wildcards.pre_caller}.FamSeqMCMC.tmp.vcf "
+
+
+rule beagle_4_0:
+    input:
+        ped = config["folders"]["data"] + "/{project}.ped",
+        vcf = tmp + "/variant_calling/{reference}/{project}.{chr}.{pre_caller}.vcf"
+    output:
+        vcf_gz = tmp + "/variant_calling/{reference}/{project,[^\.]+}.{chr}.{pre_caller}.beagle.vcf.gz"
+    params:
+        outvcfprefix = tmp + "/variant_calling/{reference}/{project,[^\.]+}.{chr}.{pre_caller}.beagle",
+        custom = config["settings"].setdefault("beagle", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{chr}.{pre_caller}.beagle.log"
+    threads: 8 # 
+    shell:
+        "beagle "
+        "gtgl={input.vcf} "
+        "ped={input.ped} "
+        "out={params.outvcfprefix} "
+        "nthreads={threads} "
+        "{params.custom} "
+        "2>&1 | tee {log}"
+
+rule beagle_chr_to_child_GT:
+    """
+    Take BEAGLE 4.0 per chromosome family `vcf.gz`s and turn them into a bcf file only
+    containing the child of interest and the BEAGLE 4.0 genotype as an (unphased!)
+    GT Format field.
+    ATTENTION: excludes the Y chromosome, as created for female
+    """
+    input:
+        vcf_gzs = lambda wildcards:
+                expand( tmp + "/variant_calling/{reference}/{project}.{chrom}.{pre_caller}.beagle.vcf.gz",
+                    reference = wildcards.reference,
+                    chrom = chrlist,
+                    project = config["project_name"],
+                    pre_caller = wildcards.pre_caller),
+        vcf_gz_idxs = lambda wildcards: # BEAGLE 4.0 doesn't output chr headers, this is a work-around
+                expand( tmp + "/variant_calling/{reference}/{project}.{chrom}.{pre_caller}.beagle.vcf.gz.csi",
+                    reference = wildcards.reference,
+                    chrom = chrlist,
+                    project = config["project_name"],
+                    pre_caller = wildcards.pre_caller)
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.{pre_caller}.beagle.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.{pre_caller}.beagle.log"
+    shell:
+        "echo \"{wildcards.child} beagle\" >variant_calling/{wildcards.reference}/{wildcards.child}.{wildcards.pre_caller}.beagle.reheader; "
+        "bcftools concat -O v {input.vcf_gzs} | "
+        "bcftools view -O v -s {wildcards.child} | "
+        "bcftools annotate -O v -x INFO,^FORMAT/GT | "
+        "bcftools reheader -s variant_calling/{wildcards.reference}/{wildcards.child}.{wildcards.pre_caller}.beagle.reheader | "
+        "bcftools +setGT - -- -t a -n u | "
+        "bcftools view -t ^chrM,chrY -O b -o {output.bcf} "
+        "2>&1 | tee {log} "
+
+
+rule beagle_4_0_IBD:
+    input:
+        ped = config["folders"]["data"] + "/{project}.ped",
+        vcf = "variant_calling/{reference}/{project}.{pre_caller}.vcf"
+    output:
+        vcf = "variant_calling/{reference}/{project,[^\.]+}.{pre_caller}.beagle.ibd.vcf.gz"
+    params:
+        outvcfprefix = "variant_calling/{reference}/{project,[^\.]+}.{pre_caller}.beagle.ibd",
+        custom = config["settings"].setdefault("beagle", "")
+    log:
+        "log/variant_calling/{reference}/{project}.{pre_caller}.beagle.ibd.log"
+    threads: 8 # 
+    shell:
+        "beagle "
+        "gtgl={input.vcf} "
+        "ped={input.ped} "
+        "out={params.outvcfprefix} "
+        "nthreads={threads} "
+        "ibd=true "
+        "{params.custom} "
+        "2>&1 | tee {log}"
+
+rule consensus_polymutt_beagle_FamSeqMCMC:
+    """
+    Consensus of the three pedigree-aware variant callers Polymutt,
+    BEAGLE 4.0 and FamSeq MCMC. For a call to be accepted, all callers
+    muster agree, with a maximum of one caller reporting a missing call.
+    """
+    input:
+        polymutt = "variant_calling/{reference}/{child}.{pre_caller}.polymutt.bcf",
+        polymutt_idx = "variant_calling/{reference}/{child}.{pre_caller}.polymutt.bcf.csi",
+        beagle = "variant_calling/{reference}/{child}.{pre_caller}.beagle.bcf",
+        beagle_idx = "variant_calling/{reference}/{child}.{pre_caller}.beagle.bcf.csi",
+        famseq = "variant_calling/{reference}/{child}.{pre_caller}.FamSeqMCMC.bcf",
+        famseq_idx = "variant_calling/{reference}/{child}.{pre_caller}.FamSeqMCMC.bcf.csi"
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.{pre_caller}.cons_polymutt_beagle_FamSeqMCMC.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.{pre_caller}.cons_polymutt_beagle_FamSeqMCMC.log"
+    threads: 8
+    shell:
+        "echo \"polymutt {wildcards.child}\" >variant_calling/{wildcards.reference}/{wildcards.child}.pedigree.reheader; " # polymutt has no missing values for the child of interest, so we use it as the sample to select, later
+        "bcftools merge -O u {input.polymutt} {input.beagle} {input.famseq} | "
+        "bcftools +fill-AN-AC -O u -- | " # update the AN field
+        "bcftools view -e 'AN<3' -O u | " # exclude sites where more than one tool has a missing GT
+        "bcftools +GTsubset -O u -- - -s polymutt,beagle,FamSeq_MCMC | " # select only sites where the tools agree (or max of one has a missing GT, see line above)
+        "bcftools reheader -s variant_calling/{wildcards.reference}/{wildcards.child}.pedigree.reheader | " # here, we rename polymutt to the child of interest
+        "bcftools view -s {wildcards.child} -O b -o {output.bcf} " # here we filter down to the polymutt calls, that form the consensus and have been renamed to the child of interest
+        "2>&1 | tee {log}; "
+        
+
+rule merge_polymutt_beagle_FamSeqMCMC:
+    """
+    Just merge the three pedigree-aware variant callers Polymutt,
+    BEAGLE 4.0 and FamSeq MCMC for statistics.
+    """
+    input:
+        polymutt = "variant_calling/{reference}/{child}.{pre_caller}.polymutt.bcf",
+        polymutt_idx = "variant_calling/{reference}/{child}.{pre_caller}.polymutt.bcf.csi",
+        beagle = "variant_calling/{reference}/{child}.{pre_caller}.beagle.bcf",
+        beagle_idx = "variant_calling/{reference}/{child}.{pre_caller}.beagle.bcf.csi",
+        famseq = "variant_calling/{reference}/{child}.{pre_caller}.FamSeqMCMC.bcf",
+        famseq_idx = "variant_calling/{reference}/{child}.{pre_caller}.FamSeqMCMC.bcf.csi"
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.{pre_caller}.all_polymutt_beagle_FamSeqMCMC.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.{pre_caller}.all_polymutt_beagle_FamSeqMCMC.log"
+    threads: 8
+    shell:
+        "bcftools merge -O u {input.polymutt} {input.beagle} {input.famseq} | "
+        "bcftools +fill-AN-AC -O b -o {output.bcf} -- " # update the AN field
+        "2>&1 | tee {log}; "
+
+
+rule cons_polymutt_beagle_FamSeqMCMC_no_reheader:
+    """
+    Create the consensus of the three pedigree-aware variant callers
+    Polymutt, BEAGLE 4.0 and FamSeq MCMC without reheadering, thus
+    keeping the sample columns for each tool for statistics.
+    """
+    input:
+        bcf = "variant_calling/{reference}/{child}.{pre_caller}.all_polymutt_beagle_FamSeqMCMC.bcf",
+        idx = "variant_calling/{reference}/{child}.{pre_caller}.all_polymutt_beagle_FamSeqMCMC.bcf.csi"
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.{pre_caller}.cons_no_reheader_polymutt_beagle_FamSeqMCMC.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.{pre_caller}.cons_no_reheader_polymutt_beagle_FamSeqMCMC.log"
+    threads: 8
+    shell:
+        "bcftools view -e 'AN<3' -O u {input.bcf} | " # exclude sites where more than one tool has a missing GT
+        "bcftools +GTsubset -O b -o {output.bcf} -- - -s polymutt,beagle,FamSeq_MCMC " # select only sites where the tools agree (or max of one has a missing GT, see line above)
+        "2>&1 | tee {log}; "
+
+
+
+rule bcftools_family_invariant_sites_per_chr:
+    """
+    Use bcftools mpileup to gather all sites where all family members have coverage,
+    but none have any evidence of a non-reference nucleotide. These are needed to
+    balance the bias towards non-reference sites that GATK + pedigree callers
+    introduces in our germline genotype.
+    """
+    input:
+        ref = lambda wildcards: config["references"][wildcards.reference],
+        bams = lambda wildcards:
+                expand("mapping/{reference}/samples/{sample}.bps.sorted.bam",
+                    reference = wildcards.reference,
+                    sample = config["samples"].keys())
+    output:
+        vcf_gz = tmp + "/variant_calling/{reference}/{project,[^\.]+}.{chrom}.bcftools_mpileup_non_variant.vcf.gz"
+    log:
+        bcf = "log/variant_calling/{reference}/{project,[^\.]+}.{chrom}.bcftools_mpileup_non_variant.log"
+    threads: 4
+    shell:
+        "bcftools mpileup "
+        " --fasta-ref {input.ref} "
+        " --regions {wildcards.chrom} "
+        " --annotate FORMAT/DP "
+        " {input.bams} | "
+        "bcftools view "
+        " --include 'ALT==\"<*>\"' | " # ensures that the only possible ALT allele is the empty one
+        "bcftools view "
+        " --exclude 'FORMAT/DP[*]<25'" # ensures that none of the samples has a coverage lower than 25 (this is an arbitrary ad-hoc cutoff to ensure that no ALT allele is missed by chance, while generating sufficient numbers of high confidence HOM REF sites)
+        " --threads {threads} "
+        " -O z -o {output.vcf_gz} "
+        "2>&1 | tee {log}"
+
+
+rule bcftools_non_variant_to_child:
+    """
+    Take chromosome specific bcftools mpileup output of high-confidence
+    non-variant sites and concat into single bcf file for child of
+    interest.
+    """
+    input:
+        vcf_gzs = lambda wildcards:
+                expand( tmp + "/variant_calling/{reference}/{project}.{chrom}.bcftools_mpileup_non_variant.vcf.gz",
+                    reference = wildcards.reference,
+                    project = config["project_name"],
+                    chrom = chrlist),
+        vcf_gz_idxs = lambda wildcards: 
+                expand( tmp + "/variant_calling/{reference}/{project}.{chrom}.bcftools_mpileup_non_variant.vcf.gz.csi",
+                    reference = wildcards.reference,
+                    project = config["project_name"],
+                    chrom = chrlist)
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.bcftools_mpileup_non_variant.bcf"
+    log:
+        "log/variant_calling/{reference}/{child}.bcftools_mpileup_non_variant.log"
+    shell:
+        "echo '##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">' "
+        " >variant_calling/{wildcards.reference}/{wildcards.child}.bcftools_mpileup_non_variant.header; "
+        "bcftools concat -O v {input.vcf_gzs} | "
+        "bcftools annotate -O v "
+        " --header-lines variant_calling/{wildcards.reference}/{wildcards.child}.bcftools_mpileup_non_variant.header | "
+        " sed -r -e 's/PL:DP/GT:PL:DP/' -e 's/\\t([0-9]+,[0-9]+,[0-9]+:[0-9]+)/\\t0\/0:\\1/g' "
+        " >variant_calling/{wildcards.reference}/{wildcards.child}.bcftools_mpileup_non_variant.tmp.vcf; "
+        "bcftools view -s {wildcards.child} variant_calling/{wildcards.reference}/{wildcards.child}.bcftools_mpileup_non_variant.tmp.vcf | "
+        "bcftools annotate -x ^FORMAT/GT | "
+        "bcftools view -t ^chrM,chrY -O b -o {output.bcf} "
+        "2>&1 | tee {log}; "
+        "rm variant_calling/{wildcards.reference}/{wildcards.child}.bcftools_mpileup_non_variant.tmp.vcf; "
+        "rm variant_calling/{wildcards.reference}/{wildcards.child}.bcftools_mpileup_non_variant.header; "
+
+
+rule merge_pedigree_non_variant:
+    """
+    Pipeline-/analysis-specific rule to merge the outputs of the child's
+    pedigree calling with the child's non variant sites as a candidate
+    list with high quality genotypes for single cell (germline) calling.
+    """
+    input:
+        pedigree = "variant_calling/{reference}/{child}.gatk_snps.cons_polymutt_beagle_FamSeqMCMC.bcf",
+        ped_idx = "variant_calling/{reference}/{child}.gatk_snps.cons_polymutt_beagle_FamSeqMCMC.bcf.csi",
+        non_var = "variant_calling/{reference}/{child}.bcftools_mpileup_non_variant.bcf",
+        non_var_idx = "variant_calling/{reference}/{child}.bcftools_mpileup_non_variant.bcf.csi"
+    output:
+        bcf = "variant_calling/{reference}/{child,[^\.]+}.ground_truth.bcf"
+    log: "log/variant_calling/{reference}/{child,[^\.]+}.ground_truth.log"
+    threads: 4
+    shell:
+        "bcftools concat "
+        " --threads {threads} "
+        " --allow-overlaps "
+        " -O b -o {output.bcf} "
+        " {input.pedigree} {input.non_var} "
+        "2>&1 | tee {log} "
+        
+rule ground_truth_to_tsv_gz:
+    input:
+        "variant_calling/{reference}/{child}.ground_truth.bcf"
+    output:
+        "variant_calling/{reference}/{child,[^\.]+}.ground_truth.tsv.gz"
+    log:
+        "log/variant_calling/{reference}/{child}.ground_truth.to_tsv_gz.log"
+    shell:
+        "( bcftools query -f '%CHROM\t%POS[\t%GT]\n' {input} | gzip --stdout >> {output} ) 2>> {log}"
+
+

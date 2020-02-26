@@ -1,0 +1,146 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+"""
+Template Snakefile for a pipeline using SnakemakeBIFO rules. 
+
+Expects a yaml config file, for an example see 'config.yaml' in the pipeline 
+subfolder for your current server environment.
+Expects a subfolder SnakemakeBIFO which should be a clone of:
+https://github.com/hzi-bifo/SnakemakeBIFO
+
+Delete or comment out:
+1. Whatever rules-files you don't need to include.
+2. Whatever targets you may not need.
+
+Note the separation between samples and runs that allows to have more than
+one sequencing run for each sample, or multiple lanes per sample.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+configfile: "config.yaml"
+
+include_prefix = "../"
+
+include: include_prefix + "rules/input.rules"
+include: include_prefix + "rules/preprocessing.rules"
+include: include_prefix + "rules/mapping.rules"
+include: include_prefix + "rules/bam_proc_per_run.rules"
+include: include_prefix + "rules/bam_proc_per_sample.rules"
+include: include_prefix + "rules/variant_calling.rules"
+
+# FINAL RESULTS MUST BE MOVED TO A LOCATION WHERE THEY WILL BE BACKED UP,
+# INCLUDING THE PIPELINE VERSION AND CONFIGURATION THAT GENERATED THEM
+workdir: "./"
+
+def _create_full_tag(run):
+    if config["runs"][run] == "pair":
+        return [ ".S",  ".P" + config["infix"]["pair"][0],
+                    ".P" + config["infix"]["pair"][1] ]
+    elif config["runs"][run] == "single":
+        return [ ".SE" ]
+
+def _create_tag(run):
+    if config["runs"][run] == "pair":
+        return [ ".S",  ".P"]
+    elif config["runs"][run] == "single":
+        return [ ".SE" ]
+
+# tmp folder definition for the local system, will default to "/local/tmp"
+tmp = config["folders"].get("tmp", "/local/tmp")
+
+chrlist = ['chrM', 'chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+           'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+           'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+           'chr22', 'chrX', 'chrY']
+
+rule all:
+    input:
+        ### initial FastQC run on the input data
+        [ "preprocessing/runs/fastqc/" + run + read + "_fastqc.zip" for run in
+            config["runs"].keys() for read in config["infix"][ config["runs"][run] ] ],
+        ### another FastQC run after cutadapt Illumina adapter trimming
+        [ "preprocessing/runs/fastqc/" + run + read +
+            ".cutadaptIllumina_fastqc.zip" for run in config["runs"].keys() for
+            read in config["infix"][ config["runs"][run] ] ],
+#        ### request only the cutadap Illumina adapter trimming results without FastQC check
+#        [ "preprocessing/runs/" + run + read + ".cutadaptIllumina.fastq.gz" for
+#            run in config["runs"].keys() for read in
+#            config["infix"][ config["runs"][run] ] ],
+#        ### request only trimmomatic quality trimming output without FastQC check, if this is 
+#        ### the final preprocessing step, just use the pp rule below
+#        [ "preprocessing/runs/" + run + tag + ".cutadaptIllumina.trimmomaticQual.fastq.gz" for run in
+#            config["runs"].keys() for tag in _create_full_tag(run)],
+#        ### request only final preprocessing output without FastQC check
+#        [ "preprocessing/runs/" + run + tag + ".pp.fastq.gz" for run in
+#            config["runs"].keys() for tag in _create_full_tag(run)],
+        ### another FastQC run after all preprocessing steps
+        [ "preprocessing/runs/fastqc/" + run + tag + ".pp_fastqc.zip" for run in
+            config["runs"].keys() for tag in _create_full_tag(run)],
+        ### summarise FastQC kmers after all preprocessing steps
+        [ "preprocessing/runs/" + config["project_name"] + ".pp.forward.kmers" ],
+        [ "preprocessing/runs/" + config["project_name"] + ".pp.reverse.kmers" ],
+        [ "preprocessing/runs/" + config["project_name"] + ".pp.singleton.kmers" ],
+        [ "preprocessing/runs/" + config["project_name"] + ".pp.single.kmers" ],
+#        [ "mapping/hg19/runs/" + run + tag + ".bwamem.bam" for run in
+#            config["runs"].keys() for tag in _create_tag(run)],
+#        [ "mapping/hg19/runs/" + run + tag + ".map.bam" for run in
+#            config["runs"].keys() for tag in _create_tag(run)],
+#        [ "mapping/hg19/runs/" + run + tag + ".map.sorted.bam" for run in
+#            config["runs"].keys() for tag in _create_tag(run)],
+#        [ "mapping/hg19/runs/" + run + ".map.sorted.bam" for run in
+#            config["runs"].keys() ],
+#        ### BAM output after per run processing (bpr)
+#        [ "mapping/hg19/runs/" + run + ".bpr.sorted.bam"
+#                for run in config["runs"].keys() ],
+         [ "mapping/hg19/runs/" + config["project_name"] + ".MarkDupMetrics.tsv" ],
+#        ### BAM output after per sample processing (bps), one sample can consist of multiple runs
+#        [ "mapping/hg19/samples/" + sample + ".bps.sorted.bam"
+#                for sample in config["samples"].keys() ],
+         [ "mapping/hg19/samples/" + config["project_name"] +
+             ".bps.sorted.SureSelectHumanAllExonV5plusUTR.HsMetrics.tsv" ],
+#        ### GVCF output after initial variant calling with GATK HaplotypeCaller (per sample per chr)
+#        [ tmp + "/variant_calling/hg19/" + sample + "." + chrom + ".hc.g.vcf" for
+#            sample in config["samples"].keys() for chrom in chrlist ],
+        ### VCF output after (joint) variant calling with GATK GenotypeGVCFs and merging all chromosomes (per project)
+##        [ "variant_calling/hg19/" + sample + ".bcftools.bcf" 
+##                for sample in config["samples"].keys() ],
+        ### VCF output after variant calling, e.g. with GATK HaplotypeCaller
+#        [ "variant_calling/hg19/" + sample + ".gatk_all.bcf"
+#                for sample in config["samples"].keys() ],
+#        ### VCF output after initial genotyping with GATK GenotypeGVCFs (per sample per chr)
+##        [ tmp + "/variant_calling/hg19/" + config["project_name"] + "." + chrom + ".gatk_snps.vcf"
+##            for chrom in chrlist ],
+        ### variant calls after standard variant calling
+#        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.vcf" ],
+        ### variant calls after pedigree call refinement
+#        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.polymutt.vcf" ],
+#        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.beagle.vcf" ],
+#        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.beagle.ibd.vcf" ],
+##        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.FamSeqBN.vcf" ],
+##        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.FamSeqES.vcf" ],
+#        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.FamSeqMCMC.vcf" ],
+##        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.beagle.vcf" ],
+##        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.beagle.ibd.vcf" ],
+##        [ "variant_calling/hg19/" + config["project_name"] + ".gatk_all.polymutt_denovo.vcf" ],
+#        [ "variant_calling/hg19/CCS_1_W.gatk_all.cons_polymutt_beagle_FamSeqMCMC.bcf" ],
+##        [ "variant_calling/hg19/CCS_1_W.gatk_snps.cons_polymutt_beagle_FamSeqMCMC.bcf" ],
+        [ "variant_calling/hg19/CCS_1_W.gatk_snps.all_polymutt_beagle_FamSeqMCMC.bcf" ],
+##        [ "variant_calling/hg19/CCS_1_W.bcftools_mpileup_non_variant.bcf" ],
+#        [ "variant_calling/hg19/CCS_1_W.ground_truth.bcf" ],
+        [ "variant_calling/hg19/CCS_1_W.ground_truth.tsv.gz" ],
+#        [ "variant_calling/hg19/CCS_1_W.gatk.cons_polymutt_beagle_FamSeqMCMC.bcf" ],
+#        ### VCF output after variant recalibration with GATK
+#        [ "variant_calling/hg19/" + sample + ".gatk_all.snp_recalibrated.indel_recalibrated.vcf"
+#                for sample in config["samples"].keys() ],
+#        ### VCF output after variant recalibration with GATK
+#        [ "variant_calling/hg19/" + sample + ".gatk_all.prosolo.vcf"
+#                for sample in config["samples"].keys() ],
+##        [ "variant_calling/hg19/" + config["project_name"] + ".bps.gatk.snp_recalibrated.indel_recalibrated.vcf" ],
+#        ### per sample human whole exome statistics for the SureSelectHumanAllExonV5plusUTR probe set
+#        [ "mapping/hg19/samples/" + sample + 
+#                ".bps.sorted.SureSelectHumanAllExonV5plusUTR.hs_metrics" 
+#                for sample in config["samples"].keys() ],
+

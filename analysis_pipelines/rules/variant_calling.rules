@@ -1,0 +1,30 @@
+"""
+This file aggregates all rules for variant calling on a bam (or in the
+future cram) file, which are specified in the folder "variant_calling".
+If you add a file to that folder, you should also add the corresponding
+include statement here.
+
+Configuration of the processes to run in this stage should be provided
+in YAML format and specified in the Snakefile. For a commented example,
+see config.yaml in the directory pipelines, in particular:
+
+stages:
+    variant_calling: ''
+
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+include: "variant_calling/gatk_haplotype_caller.rules"
+include: "variant_calling/gatk_genotyper.rules"
+include: "variant_calling/pedigree_variant_calling.rules"
+include: "variant_calling/gatk_variant_recalibrator.rules"
+include: "variant_calling/bcftools_calling.rules"
+include: "variant_calling/vcffiles.rules"
+include: "variant_calling/prosolo.rules"
+include: "variant_calling/sccaller.rules"
+include: "variant_calling/monovar.rules"
+include: "variant_calling/sciphi.rules"
+
+

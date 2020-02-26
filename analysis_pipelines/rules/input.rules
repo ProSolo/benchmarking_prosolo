@@ -1,0 +1,41 @@
+"""
+Set up local links to input files in the working directory.
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+folders:
+    data: /path/to/where/your/data/is/to/be/found
+runs:
+    run1: pair
+    run2: single
+infix:
+    single:
+        - '.0'
+    pair:
+        - '.1'
+        - '.2'
+
+Data is expected to be organised in one folder per run, with the run name as folder
+name and as file basename, with additional infixes, e.g. for the two files of run1
+in the above example this would be:
+/path/to/root/data/folder/run1/run1.1.fastq.gz
+/path/to/root/data/folder/run1/run1.2.fastq.gz
+
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+rule input_linking:
+    input:
+        lambda wildcards: expand(
+                "{data_folder}/{run}/{run}.{read}.fastq.gz",
+                data_folder=config["folders"]["data"],
+                run = wildcards.run, read = wildcards.read )
+    output:
+        "preprocessing/runs/{run,[^.]+}.{read,[^.]+}.fastq.gz"
+    shell:
+        "ln -s {input} {output} && touch -h {output}"
+

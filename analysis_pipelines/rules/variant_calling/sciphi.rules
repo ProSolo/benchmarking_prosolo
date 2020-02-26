@@ -1,0 +1,176 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+Using sciphi installed via bioconda, available in your path as `sciphi`.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+import os.path as path
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+rule samtools_mpileup_single_cell_per_chr:
+    input:
+        ref = _get_ref,
+        bams = lambda wildcards: expand("mapping/{reference}/samples/{sample}.bps.sorted.bam",
+                    reference = wildcards.reference, sample = config["batches"][wildcards.batch]),
+        bais = lambda wildcards: expand("mapping/{reference}/samples/{sample}.bps.sorted.bam.bai",
+                    reference = wildcards.reference, sample = config["batches"][wildcards.batch])
+    output:
+        temp("variant_calling/{reference,[^/]+}/sciphi/{batch,[^.]+}.{chrom,chr(?:\d{1,2}|[XYM])}.mpileup")
+    shell:
+        "samtools mpileup "
+        " -f {input.ref} "
+        " -B "
+        " -d 1000 "
+        " -q 40 "
+        " -Q 30 "
+        " -r {wildcards.chrom} "
+        " {input.bams} "
+        " > {output}"
+
+
+rule samtools_combine_mpileups:
+    input:
+        lambda w: expand( "variant_calling/{reference}/sciphi/{batch}.{chrom}.mpileup",
+            reference = w.reference,
+            batch = w.batch,
+            chrom = chrlist
+            )
+    output:
+        "variant_calling/{reference}/sciphi/{batch,[^.]+}.mpileup"
+    shell:
+        'cat {input} > {output}'
+
+
+rule create_sciphi_bam_file_list:
+    input:
+        lambda wildcards: expand("mapping/{reference}/samples/{sample}.bps.sorted.bam",
+                    reference = wildcards.reference, sample = config["batches"][wildcards.batch])
+    output:
+        txt = "variant_calling/{reference,[^/]+}/sciphi/{batch,[^.]+}.filenames.txt"
+    run:
+        with open(output.txt, 'w') as out_file:
+            for bam in input:
+                out_file.write(bam + "\tCT\n")
+
+
+rule sciphi:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = "variant_calling/{reference}/sciphi/{batch}.mpileup"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.default.sciphi.vcf"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{batch}.default.sciphi_call.log"
+    threads: 2 
+    conda: "envs/sciphi.yaml"
+    params:
+        out = lambda wildcards, output: path.splitext(str(output))[0],
+        out_index = lambda wildcards, output: path.dirname(str(output)) + "index"
+    shell:
+        "sciphi "
+        " -o {params.out} "
+        " --ol {params.out_index} "
+        " --in {input.filenames} "
+        " --lz 1 "
+        " --seed {wildcards.run} "
+        " -l 1000000 "
+        " {input.mpileup} 2>&1 | tee {log}"
+
+rule sciphi_quick_sensitive:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = "variant_calling/{reference}/sciphi/{batch}.mpileup"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.400000_iterations.sensitive.sciphi.vcf"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{batch}.400000_iterations.sensitive.sciphi_call.log"
+    threads: 2 
+    conda: "envs/sciphi.yaml"
+    params:
+        out = lambda wildcards, output: path.splitext(str(output))[0],
+        out_index = lambda wildcards, output: path.dirname(str(output)) + "index"
+    shell:
+        "sciphi "
+        " -o {params.out} "
+        " --ol {params.out_index} "
+        " --in {input.filenames} "
+        " --lz 1 "
+        " --seed {wildcards.run} "
+        " -l 400000 "
+        " --cwm 1 "
+        " --mnp 1 "
+        " --ms 1 "
+        " --bns 0 "
+        " --bnc 0 "
+        " --ncf 0 "
+        " --mnc 1 "
+        " {input.mpileup} 2>&1 | tee {log}"
+
+
+ruleorder: bcftools_bgzip_index_sciphi > bcftools_index
+
+rule bcftools_bgzip_index_sciphi:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/{batch}.{extra_options}sciphi.vcf",
+    output:
+        vcf = "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch}.{extra_options}sciphi.vcf.gz",
+        idx = "variant_calling/{reference}/sciphi/{run}/{batch,[^.]+}.{extra_options}sciphi.vcf.gz.csi"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{batch}.{extra_options}sciphi_fix_bgzip_index.log"
+    shell:
+        "sed -e 's/\(DP\):\([0-9]\+\)/\\1=\\2/' {input} | bcftools view -O z -o {output.vcf}; " # fix erroneous INFO field
+        "bcftools index {output.vcf}"
+
+
+rule bcftools_split_sciphi_by_cell:
+    input:
+        vcf = "variant_calling/{reference}/sciphi/{run}/{batch}.{extra_options}sciphi.vcf.gz",
+        idx = "variant_calling/{reference}/sciphi/{run}/{batch}.{extra_options}sciphi.vcf.gz.csi"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{sc,[^.]+}.{batch,[^.]+}.{extra_options}sciphi.bcf"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/sciphi_split_cells/{sc}.{batch}.{extra_options}sciphi.split.log"
+    shell:
+        "bcftools view --samples {wildcards.sc}.bps.sorted.bam --trim-alt-alleles -O b -o {output} {input.vcf}"
+
+
+rule sciphi_cell_to_tsv:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.bcf"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{sc,[^.]+}.{batch,[^.]+}.{extra_options}sciphi.tsv"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi_to_tsv.log"
+    shell:
+        "bcftools view -h {input} | grep ^#CHROM | cut -f 1,2,4,5,10- | cut -c2- | "
+        " sed -e 's/\.bps\.sorted\.bam//g' > {output}; "
+        "bcftools norm --multiallelic -any -O u {input} | "
+        "bcftools view -O u --types snps -e 'STRLEN(REF)>1||STRLEN(ALT)>1' | "
+        "bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n' >> {output} "
+
+
+rule sciphi_true_false_pos_neg_calculations:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls = "variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.tsv"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{sc,[^.]+}.{batch,[^.]+}.{extra_options}sciphi.positives_negatives.tsv"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.positives_negatives.log"
+    resources:
+        mem_gb = 15
+    shell:
+        "Rscript --vanilla " + include_prefix + "scripts/monovar.P-N_stats.alt-calling.R "
+        " --gt {input.ground_truth} "
+        " --calls {input.calls} "
+        " --out {output} "
+        " 2>&1 | tee {log} "
+

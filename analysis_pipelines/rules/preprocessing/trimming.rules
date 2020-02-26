@@ -1,0 +1,449 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Trim paired end or single end reads. Depending on the software,
+adaptors can be removed and/or reads can be trimmed by quality.
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+# run specification needed for automatic merging of bam files after read
+# mapping (trimmed paired end reads generate two paired end fastqs and one
+# singleton fastq where one read was excluded altoghether)
+runs:
+  - run1: pair
+  - run2: single
+  - run3: pair
+# infix specification needed for automatic selection of paired end vs. single
+# end trimming in cutadapt and trimmomatic
+infix:
+  single:
+    - '.0'
+  pair:
+    - '.1'
+    - '.2'
+settings: 
+  # These are needed for cutadapt (as these parameters should be tailored to
+  # each project, they should be specified in the config file, but good
+  # defaults are provided below)
+  cutadapt:
+    # how many times to look for left-overs of adapter sequence
+    times: ' --times=2 '
+    # how many bases of overlap are needed for trimming
+    overlap: ' --overlap=6 '
+    # remove all reads with a minimum length lower than this value -- if
+    # another round of trimming, e.g. with trimmomatic, is performed, leave
+    # that filtering to the second tool
+    minlen: ' --minimum-length=25 '
+    # cut a fixed amount of bases from front/end of each read
+    crop: ' --cut=5 --cut=-3 ' # 5 bases off of front, 3 bases off of end of read
+    # other command line options to be passed to cutadapt
+    misc: ' '
+    adapters:
+      # additional adapters to look for in the first read (on top of standard Illumina)
+      first: ' -b ACGT '
+      # additional adapters to look for in the second read (on top of standard Illumina)
+      second: ' -B ACGT '
+  # These are needed for trimmomatic (as these parameters should be tailored to
+  # each project, they should be specified in the config file, but good
+  # defaults are provided below)
+  trimmomatic:
+    # where to find Illumina adapters and how to cut them -- but cutadapt is better at
+    # cutting adapters, thus rather use the rules not cutting adapters -- otherwise,
+    # use TruSeq3-PE-2.fa for all Illumina data (including single end), as
+    # it contains reverse complements of adapters, which helps remove remains
+    # of adapter dimer contamination
+    Illumina: ' ILLUMINACLIP:/net/programs/Debian-7-x86_64/Trimmomatic-0.33/adapters/TruSeq3-PE-2.fa:2:30:5:4:true '
+    # use "HEADCROP:n" to cut off n bases off the start of the read and use
+    # "CROP:n" to trim the read to a length of n, cutting bases off the end
+    crop: ' HEADCROP:2 CROP:95 '
+    # remove all reads with a minimum length lower than this value
+    minlen: ' MINLEN:25 '
+    # parameters for the quality trimming
+    quality: ' SLIDINGWINDOW:4:30 LEADING:20 TRAILING:20 '
+   
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+import os
+
+
+##################
+# cutadapt rules #
+##################
+
+# ALL FOLLOWING CONFIGURATIONS ARE OVERRIDDEN BY VALUES EXISTING IN config.json
+# make sure config["settings"]["cutadapt"] exists
+config["settings"].setdefault("cutadapt", {})
+# searching for adapter twice helps remove adapter junk
+config["settings"]["cutadapt"].setdefault("times", " --times=2 ")
+# requiring a minimum overlap of 5 bases for adapter trimming
+# allows for too many false trimmings / random adapter matches,
+# rather have confidence in newer mappers/aligners
+config["settings"]["cutadapt"].setdefault("overlap", " --overlap=6 ")
+# use " --minimum-length=n " to discard all reads shorter than n
+config["settings"]["cutadapt"].setdefault("minlen", " ")
+# use " --cut=x --cut=-y " to cut x bases off the front and y bases
+# off the end of the read. Only works for 1st read in a pair.
+config["settings"]["cutadapt"].setdefault("crop", " ")
+# use this for all kinds of other settings
+config["settings"]["cutadapt"].setdefault("misc", " ")
+# use this for extra adapters
+config["settings"]["cutadapt"].setdefault("adapters", {} )
+config["settings"]["cutadapt"]["adapters"].setdefault("first", " " )
+config["settings"]["cutadapt"]["adapters"].setdefault("second", " " )
+
+rule cutadapt_malbac_illumina_PE:
+    """
+    Remove MALBAC and Illumina adapters from sequencing reads using cutadapt.
+    """
+    input:
+        expand("preprocessing/runs/{{run}}{read}{{extra}}.fastq.gz",
+                read = config["infix"]["pair"] )
+    output:
+        expand("preprocessing/runs/{{run}}{read}{{extra,.*}}.cutadaptMalbacIllumina.fastq.gz",
+                read = config["infix"]["pair"] )
+    log : "log/preprocessing/{run}{extra}.cutadaptMalbacIllumina.log"
+    params: custom = config["settings"]["cutadapt"]["times"] +
+                     config["settings"]["cutadapt"]["adapters"]["first"] +
+                     config["settings"]["cutadapt"]["adapters"]["second"] +
+                     config["settings"]["cutadapt"]["overlap"] +
+                     config["settings"]["cutadapt"]["minlen"] +
+                     config["settings"]["cutadapt"]["crop"]
+    threads: 4
+    shell: # the first five adaptors are Malbac, the following six Illumina
+        """
+        cutadapt \
+            -b GTGAGTGATGGTTGAGGTAGTGTGGAG \
+            -b CTCCACACTACCTCAACCATCACTCAC \
+            -B GTGAGTGATGGTTGAGGTAGTGTGGAG \
+            -B CTCCACACTACCTCAACCATCACTCAC \
+              \
+            -b AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC \
+            -b GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT \
+            -b TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            -b ATCTCGTATGCCGTCTTCTGCTTG \
+            -B AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT \
+            -B TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            {params.custom} \
+            -j {threads} \
+            -o {output[0]}  \
+            -p {output[1]}  \
+            {input[0]} \
+            {input[1]} 2>&1 | tee {log};
+        """
+
+rule cutadapt_Illumina_PE:
+    """
+    Remove Illumina TruSeq adapters from paired-end sequencing reads using cutadapt.
+    If possible, use Trimmomatic instead. It usually does a better job.
+    """
+    input: 
+        expand("preprocessing/runs/{{run}}{read}{{extra}}.fastq.gz",
+                read = config["infix"]["pair"] )
+    output:
+        expand("preprocessing/runs/{{run}}{read}{{extra,.*}}.cutadaptIllumina.fastq.gz",
+                read = config["infix"]["pair"] )
+    params: custom = config["settings"]["cutadapt"]["times"] +
+                     config["settings"]["cutadapt"]["adapters"]["first"] +
+                     config["settings"]["cutadapt"]["adapters"]["second"] +
+                     config["settings"]["cutadapt"]["overlap"] +
+                     config["settings"]["cutadapt"]["minlen"] +
+                     config["settings"]["cutadapt"]["crop"]
+    log:
+        expand("log/preprocessing/{{run}}{read}{{extra}}.cutadaptIllumina.log",
+                read = config["infix"]["pair"] )
+    threads: 4
+    shell:
+        """
+        cutadapt \
+            -b AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC \
+            -b GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT \
+            -b TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            -b ATCTCGTATGCCGTCTTCTGCTTG \
+            -B AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT \
+            -B TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            {params.custom} \
+            -j {threads} \
+            -o {output[0]} \
+            -p {output[1]} \
+            {input[0]} \
+            {input[1]} 2>&1 | tee {log}
+        """
+
+rule cutadapt_Illumina_SE:
+    """
+    Remove Illumina TruSeq adapters from single-end sequencing reads using cutadapt.
+    If possible, use Trimmomatic instead. It usually does a better job.
+    """
+    input:
+        expand("preprocessing/runs/{{run}}{read}{{extra}}.fastq.gz",
+                read = config["infix"]["single"] )
+    output:
+        expand("preprocessing/runs/{{run}}{read}{{extra,.*}}.cutadaptIllumina.fastq.gz",
+                read = config["infix"]["single"] )
+    params: custom = config["settings"]["cutadapt"]["times"] +
+                     config["settings"]["cutadapt"]["adapters"]["first"] +
+                     config["settings"]["cutadapt"]["overlap"] +
+                     config["settings"]["cutadapt"]["minlen"] +
+                     config["settings"]["cutadapt"]["crop"]
+    log:
+        expand("log/preprocessing/{{run}}{read}{{extra}}.cutadaptIllumina.log",
+                read = config["infix"]["single"] )
+    threads: 4
+    shell:
+        """
+        cutadapt \
+            -b AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC \
+            -b GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT \
+            -b TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            -b ATCTCGTATGCCGTCTTCTGCTTG \
+            {params.custom} \
+            -j {threads} \
+            -o {output} \
+            {input} 2>&1 | tee {log}
+        """
+
+rule cutadapt_IlluminaQual_PE:
+    """
+    Remove Illumina TruSeq adapters and low quality bases from paired-end
+    sequencing reads using cutadapt.
+    If possible, use Trimmomatic instead. It usually does a better job.
+    """
+    input: 
+        expand("preprocessing/runs/{{run}}{read}{{extra}}.fastq.gz",
+                read = config["infix"]["pair"] )
+    output:
+        expand("preprocessing/runs/{{run}}{read}{{extra,.*}}.cutadaptIlluminaQual.fastq.gz",
+                read = config["infix"]["pair"] )
+    params: custom = config["settings"]["cutadapt"]["times"] +
+                     config["settings"]["cutadapt"]["adapters"]["first"] +
+                     config["settings"]["cutadapt"]["adapters"]["second"] +
+                     config["settings"]["cutadapt"]["overlap"] +
+                     config["settings"]["cutadapt"]["minlen"] +
+                     config["settings"]["cutadapt"]["crop"]
+    log:
+        expand("log/preprocessing/{{run}}{read}{{extra}}.cutadaptIlluminaQual.log",
+                read = config["infix"]["pair"] )
+    threads: 4
+    shell:
+        """
+        cutadapt \
+            -b AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC \
+            -b GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT \
+            -b TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            -b ATCTCGTATGCCGTCTTCTGCTTG \
+            -B AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT \
+            -B TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            {params.custom} \
+            -q 15,15 \
+            -j {threads} \
+            -o {output[0]} \
+            -p {output[1]} \
+            {input[0]} \
+            {input[1]} 2>&1 | tee {log}
+        """
+
+rule cutadapt_IlluminaQual_SE:
+    """
+    Remove Illumina TruSeq adapters and low quality bases from single-end
+    sequencing reads using cutadapt.
+    If possible, use Trimmomatic instead. It usually does a better job.
+    """
+    input:
+        expand("preprocessing/runs/{{run}}{read}{{extra}}.fastq.gz",
+                read = config["infix"]["single"] )
+    output:
+        expand("preprocessing/runs/{{run}}{read}{{extra,.*}}.cutadaptIlluminaQual.fastq.gz",
+                read = config["infix"]["single"] )
+    params: custom = config["settings"]["cutadapt"]["times"] +
+                     config["settings"]["cutadapt"]["adapters"]["first"] +
+                     config["settings"]["cutadapt"]["overlap"] +
+                     config["settings"]["cutadapt"]["minlen"] +
+                     config["settings"]["cutadapt"]["crop"]
+    log:
+        expand("log/preprocessing/{{run}}{read}{{extra}}.cutadaptIlluminaQual.log",
+                read = config["infix"]["single"] )
+    threads: 4
+    shell:
+        """
+        cutadapt \
+            -b AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC \
+            -b GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT \
+            -b TACACTCTTTCCCTACACGACGCTCTTCCGATCT \
+            -b ATCTCGTATGCCGTCTTCTGCTTG \
+            {params.custom} \
+            -j {threads} \
+            -q 15,15 \
+            -o {output} \
+            {input} 2>&1 | tee {log}
+        """
+
+
+#####################
+# trimmomatic rules #
+#####################
+
+# ALL FOLLOWING CONFIGURATIONS ARE OVERRIDDEN BY VALUES EXISTING IN config.yaml
+# make sure config["settings"]["trimmomatic"] exists
+config["settings"].setdefault("trimmomatic", {} )
+config["settings"]["trimmomatic"].setdefault( "quality",
+            " LEADING:20 TRAILING:20 SLIDINGWINDOW:4:30 "
+            )
+# use TruSeq3-PE-2.fa for all Illumina data (including single end), as
+# it contains reverse complements of adapters, which helps remove remains
+# of adapter dimer contamination
+config["settings"]["trimmomatic"].setdefault( "Illumina",
+            (" ILLUMINACLIP:" +
+             "/net/programs/Debian-7-x86_64/Trimmomatic-0.33/adapters/TruSeq3-PE-2.fa" +
+             ":2:30:5:4:true ")
+            )
+# use "HEADCROP:n" to cut off n bases off the start of the read and use
+# "CROP:n" to trim the read to a length of n, cutting bases off the end
+config["settings"]["trimmomatic"].setdefault( "crop", " " )
+# use "MINLEN:n" to discard reads shorter than n bases
+config["settings"]["trimmomatic"].setdefault( "minlen", " " )
+
+rule trimmomatic_Qual_PE:
+    """
+    Do standard quality trimming with trimmomatic on paired end reads.
+    """
+    input:
+        lambda wildcards: expand(
+                "preprocessing/runs/{run}{read}{pp}.fastq.gz",
+                run = wildcards.run, read = config["infix"]["pair"],
+                pp = wildcards.pp )
+    output:
+        f_p = expand(
+                "preprocessing/runs/{{run}}.P{read}{{pp,.*}}.trimmomaticQual.fastq.gz",
+                read = config["infix"]["pair"][0]),
+        f_s = temp("preprocessing/runs/{run}.S.A{pp,.*}.trimmomaticQual.fastq.gz"),
+        r_p = expand(
+                "preprocessing/runs/{{run}}.P{read}{{pp,.*}}.trimmomaticQual.fastq.gz",
+                read = config["infix"]["pair"][1]),
+        r_s = temp("preprocessing/runs/{run}.S.B{pp,.*}.trimmomaticQual.fastq.gz"),
+        s = "preprocessing/runs/{run}.S{pp,.*}.trimmomaticQual.fastq.gz"
+    log: "log/preprocessing/{run}.P{pp}.trimmomaticQual.log"
+    params: str = config["settings"]["trimmomatic"]["crop"] +
+                  config["settings"]["trimmomatic"]["quality"] +
+                  config["settings"]["trimmomatic"]["minlen"]
+    threads: 3  # from looking at trimmomatic working, it doesn't seem
+                # to fully exploit more than 2 cpus at a time, anyways
+    shell:
+        "trimmomatic PE -threads {threads} -phred33 {input} "
+        "{output.f_p} {output.f_s} {output.r_p} {output.r_s} {params.str} 2>&1 | tee {log};"
+        "cat {output.f_s} {output.r_s} > {output.s}"
+
+
+rule trimmomatic_Qual_SE:
+    """
+    Do standard quality trimming with trimmomatic on single end reads.
+    """
+    input:
+        lambda wildcards: expand(
+                "preprocessing/runs/{run}{read}{pp}.fastq.gz",
+                run = wildcards.run, read = config["infix"]["single"],
+                pp = wildcards.pp )
+    output:
+        "preprocessing/runs/{run}.SE{pp,.*}.trimmomaticQual.fastq.gz"
+    log: "log/preprocessing/{run}.SE{pp}.trimmomaticQual.log"
+    params: str = config["settings"]["trimmomatic"]["crop"] +
+                  config["settings"]["trimmomatic"]["quality"] +
+                  config["settings"]["trimmomatic"]["minlen"]
+    threads: 3  # from looking at trimmomatic working, it doesn't seem
+                # to fully exploit more than 2 cpus at a time, anyways
+    shell:
+        "trimmomatic SE -threads {threads} -phred33 {input} {output} {params.str} 2>&1 | tee {log}"
+
+
+rule trimmomatic_IlluminaQual_PE:
+    """
+    Trim Illumina adapters and do standard quality trimming with trimmomatic
+    on paired end reads.
+    """
+    input:
+        lambda wildcards: expand(
+                "preprocessing/runs/{run}{read}{pp}.fastq.gz",
+                run = wildcards.run, read = config["infix"]["pair"],
+                pp = wildcards.pp )
+    output:
+        f_p = expand(
+                "preprocessing/runs/{{run}}.P{read}{{pp,.*}}.trimmomaticIlluminaQual.fastq.gz",
+                read = config["infix"]["pair"][0]),
+        f_s = temp("preprocessing/runs/{run}.S.A{pp,.*}.trimmomaticIlluminaQual.fastq.gz"),
+        r_p = expand(
+                "preprocessing/runs/{{run}}.P{read}{{pp,.*}}.trimmomaticIlluminaQual.fastq.gz",
+                read = config["infix"]["pair"][1]),
+        r_s = temp("preprocessing/runs/{run}.S.B{pp,.*}.trimmomaticIlluminaQual.fastq.gz"),
+        s = "preprocessing/runs/{run}.S{pp,.*}.trimmomaticIlluminaQual.fastq.gz"
+    log: "log/preprocessing/{run}.P{pp}.trimmomaticIlluminaQual.log"
+    params: str = config["settings"]["trimmomatic"]["crop"] +
+                  config["settings"]["trimmomatic"]["Illumina"] +
+                  config["settings"]["trimmomatic"]["quality"] +
+                  config["settings"]["trimmomatic"]["minlen"]
+    threads: 3  # from looking at trimmomatic working, it doesn't seem
+                # to fully exploit more than 2 cpus at a time, anyways
+    shell:
+        "trimmomatic PE -threads {threads} -phred33 {input} "
+        "{output.f_p} {output.f_s} {output.r_p} {output.r_s} {params.str} 2>&1 | tee {log};"
+        "cat {output.f_s} {output.r_s} > {output.s}"
+
+
+rule trimmomatic_IlluminaQual_SE:
+    """
+    Trim Illumina adapters and do standard quality trimming with trimmomatic
+    on single end reads.
+    """
+    input:
+        lambda wildcards: expand(
+                "preprocessing/runs/{run}{read}{pp}.fastq.gz",
+                run = wildcards.run, read = config["infix"]["single"],
+                pp = wildcards.pp )
+    output:
+        "preprocessing/runs/{run}.SE{pp,.*}.trimmomaticIlluminaQual.fastq.gz"
+    log: "log/preprocessing/{run}.SE{pp}.trimmomaticIlluminaQual.log"
+    params: str = config["settings"]["trimmomatic"]["crop"] +
+                  config["settings"]["trimmomatic"]["Illumina"] +
+                  config["settings"]["trimmomatic"]["quality"] +
+                  config["settings"]["trimmomatic"]["minlen"]
+                  # it makes sense to use the IlluminaPE adapter set here, as
+                  # it includes reverse complements which helps remove remains
+                  # of adapter dimers
+    threads: 3  # from looking at trimmomatic working, it doesn't seem
+                # to fully exploit more than 2 cpus at a time, anyways
+    shell:
+        "trimmomatic SE -threads {threads} -phred33 {input} {output} {params.str} 2>&1 | tee {log}"
+
+
+rule merge_trimmomatic_PE:
+    """
+    Merge all the files created by trimmomatic paired end mode. This ensures consistent
+    output naming across single vs. paired end vs. no trimming.
+    """
+    input:
+         lambda wildcards: expand(
+                 "mapping/{reference}/runs/{run}{tag}.map.sorted.bam",
+                 reference = wildcards.reference, run = wildcards.run, 
+                 tag = [ ".P", ".S" ] )
+    output:
+        "mapping/{reference}/runs/{run,[^.]+}.map.sorted.bam"
+    shell:
+        "samtools merge -cp {output} {input}"
+
+rule merge_trimmomatic_SE:
+    """
+    Create a symbolic link for trimmomatic single end mode. This ensures consistent
+    output naming across single vs. paired end vs. no trimming.
+    """
+    input:
+        "mapping/{reference}/runs/{run}.SE.map.sorted.bam"
+    output:
+        "mapping/{reference}/runs/{run,[^.]+}.map.sorted.bam"
+    run:
+        filen = os.path.basename( input[0] )
+        shell("ln -s ./{filen} {output} && touch -h {output}")
+

@@ -1,0 +1,5 @@
+# The commands in this snakemake tools file loads all the tools necessary to run:
+# scripts in SnakemakeBIFO/scripts
+
+# requires $SCRIPTS_DIR to be set in the bash wrapper starting the snakemake pipeline
+PATH="$SCRIPTS_DIR:$PATH"

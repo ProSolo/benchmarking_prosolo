@@ -1,0 +1,124 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Read mapping onto Vector sequences with BWA MEM (http://bio-bwa.sourceforge.net).
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+# this should be standard for most tools to be able to specifify extra parameters
+# via the config file
+settings: 
+    bwa_mem: ' '
+# needed for any mapping/alignment rule; folder that includes bwa index for respective bwa version
+references:
+    UniVec: '/path/to/indexed/reference/file/UniVec.fa'
+# needed for the mapping of runs to samples to properly annotate the
+# readgroups in the output
+samples:
+    sample1:
+        - run1
+        - run2
+    sample2:
+        - run3
+
+"""
+
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+bwa_mem = config["settings"].setdefault("bwa_mem", "")
+# These are dummy values, please adjust with local server values or override through config.yaml
+config["references"].setdefault("UniVec", "refdata/UniVec/UniVec.fa")
+config["references"].setdefault("UniVec_Core", "refdata/UniVec/UniVec_Core.fa")
+
+
+RUN_TO_SAMPLE = {
+    run: sample for sample, runs in config["samples"].items()
+    for run in runs}
+
+def _get_platform(wildcards):
+    return config["sample_annotations"][RUN_TO_SAMPLE[wildcards.run.rstrip('.P')]]["platform"]
+
+from snakemake.exceptions import MissingInputException
+
+rule bwa_mem_map_UniVec:
+    """
+    bwa mem mapping rule for UniVec. Should be able to deal with any paired end and
+    single end reads that are correctly documented in the config.json file. Standard
+    recommended usage would be to use config["infix"]["pair"] = [ ".1", ".2" ] for
+    paired-end reads and config["infix"]["single"] = [".0"] for single end reads
+    and specify for each config["run"] if it is "single" or "pair".
+    """
+    input:
+        config["references"]["UniVec"],
+        lambda wildcards: expand("preprocessing/runs/{run}{infix}.{rest}fastq.gz",
+                                    run = wildcards.run,
+                                    infix = config["infix"][ config["runs"][wildcards.run] ],
+                                    rest = wildcards.rest )
+    output:
+        "preprocessing/runs/{run,[^.]+}.{rest,.*}bwamem_UniVec.bam"
+    params:
+        sample=lambda wildcards: RUN_TO_SAMPLE[wildcards.run],
+        platform=_get_platform,
+        custom=bwa_mem
+    log:
+        "log/preprocessing/runs/{run}.{rest}bwamem_UniVec.log"
+    threads: 8
+    shell:
+        "bwa mem {params.custom} "
+        r"-R '@RG\tID:{wildcards.run}\t"
+        "SM:{params.sample}\tPL:{params.platform}' "
+        "-t {threads} {input} 2> >(tee {log} >&2) | "
+        "samtools view -Sbh - > {output}"
+
+rule bwa_mem_map_UniVec_Core:
+    """
+    bwa mem mapping rule for UniVec_Core. Should be able to deal with any paired end and
+    single end reads that are correctly documented in the config.json file. Standard
+    recommended usage would be to use config["infix"]["pair"] = [ ".1", ".2" ] for
+    paired-end reads and config["infix"]["single"] = [".0"] for single end reads
+    and specify for each config["run"] if it is "single" or "pair".
+    """
+    input:
+        config["references"]["UniVec_Core"],
+        lambda wildcards: expand("preprocessing/runs/{run}{infix}.{rest}fastq.gz",
+                                    run = wildcards.run,
+                                    infix = config["infix"][ config["runs"][wildcards.run] ],
+                                    rest = wildcards.rest )
+    output:
+        "preprocessing/runs/{run,[^.]+}.{rest,.*}bwamem_UniVec_Core.bam"
+    params:
+        sample=lambda wildcards: RUN_TO_SAMPLE[wildcards.run],
+        platform=_get_platform,
+        custom=bwa_mem
+    log:
+        "log/preprocessing/runs/{run}.{rest}bwamem_UniVec_Core.log"
+    threads: 8
+    shell:
+        "bwa mem {params.custom} "
+        r"-R '@RG\tID:{wildcards.run}\t"
+        "SM:{params.sample}\tPL:{params.platform}' "
+        "-t {threads} {input} 2> >(tee {log} >&2) | "
+        "samtools view -Sbh - > {output}"
+
+rule bam_2_unmapped_paired_fq:
+    input:
+        "{run}{rest}.bam"
+    output:
+        expand("{{run,[^.]+}}{infix}{{rest}}.unmapped.fastq.gz",
+                infix = config["infix"]["pair"] )
+    params:
+        forward = "{run}" + config["infix"]["pair"][0] + "{rest}.unmapped.fastq",
+        reverse = "{run}" + config["infix"]["pair"][1] + "{rest}.unmapped.fastq"
+    threads: 1
+    shell:
+        """
+        samtools fastq -F 0x2 -1 {params.forward} -2 {params.reverse} {input};
+        gzip {params.forward};
+        gzip {params.reverse}
+        """
+
+

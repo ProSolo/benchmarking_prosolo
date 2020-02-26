@@ -1,0 +1,160 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+GATK GenotypeGVCFs using GATK 3.6, available in your
+$PATH as "gatk".
+
+Configuration should be provided in YAML format (e.g. config.yaml)
+and loaded in the Snakefile.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+# tmp folder definition for the local system, will default to "/local/tmp"
+tmp = config["folders"].get("tmp", "/local/tmp")
+
+# get or set empty settings in config and config.settings
+config.setdefault("settings", {})
+config["settings"].setdefault("gatk", {})
+
+# provide GATK Bundle defaults
+config.setdefault("GATKBundle", {})
+config["GATKBundle"].setdefault("2.8", {})
+gatk_bundle_path = config["GATKBundle"]["2.8"].setdefault("folder",
+                                "/net/refdata/HomoSapiens/hg19_GATKBundle-2.8")
+# provide GATKBundle-2.8 default for dbsnp
+dbsnp = gatk_bundle_path + config["GATKBundle"].setdefault("dbsnp",
+                                                        "dbsnp_138.hg19.vcf")
+
+def _gatk_multi_arg(flag, files):
+    flag += " "
+    return " ".join(flag + f for f in files)
+
+def _return_unit_samples(unit):
+    if unit == config['project_name']:
+        return config['samples'].keys()
+    elif unit in config['batches']:
+        return config['batches'][ unit ]
+    elif unit in config['samples']:
+        return config['samples'][ unit ]
+
+
+rule gatk_genotyping_per_unit_per_chr:
+    input:
+        dbsnp,
+        ref=_get_ref,
+        gvcfs = lambda wildcards: expand(
+                tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
+                reference = wildcards.reference,
+                sample = _return_unit_samples(wildcards.unit),
+                chr = wildcards.chr),
+        idx = lambda wildcards: expand(
+                tmp +"/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx",
+                reference = wildcards.reference,
+                sample = _return_unit_samples(wildcards.unit),
+                chr = wildcards.chr)
+    output: tmp + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk.vcf"
+    params: custom = config["settings"]["gatk"].setdefault("params", "") +
+                     config["settings"]["gatk"].setdefault("GenotypeGVCFs", "")
+    log: "log/variant_calling/{reference}/{unit}.{chr}.gatk_GenotypeGVCFs.log"
+    threads: 8 
+    resources: mem_gb=2
+    run:
+        gvcfs = _gatk_multi_arg("--variant", input.gvcfs)
+        shell(
+            "gatk "
+            "-Xmx4g "
+            "-T GenotypeGVCFs {gvcfs} "
+            "-R {input.ref} "
+            "--dbsnp {dbsnp} "
+            "--out {output} "
+            "-nt {threads} "
+            "--disable_auto_index_creation_and_locking_when_reading_rods "
+            "{params.custom} "
+            "2>&1 | tee {log}")
+
+rule gatk_genotyping_all_sites_per_unit_per_chr:
+    """
+    Rule left here for documentation purposes. However, the likelihoods for
+    homozygous reference sites (across all samples) are not usable in the
+    same way as the standard PHRED likelihoods (PL), so e.g. useless for
+    pedigree variant calling.
+    """
+    input:
+        dbsnp,
+        ref=_get_ref,
+        gvcfs = lambda wildcards: expand(
+                tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
+                reference = wildcards.reference,
+                sample = _return_unit_samples(wildcards.unit),
+                chr = wildcards.chr),
+        idx = lambda wildcards: expand(
+                tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx",
+                reference = wildcards.reference,
+                sample = _return_unit_samples(wildcards.unit),
+                chr = wildcards.chr)
+    output: tmp + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk_all.vcf"
+    params: custom = config["settings"]["gatk"].setdefault("params", "") +
+                     config["settings"]["gatk"].setdefault("GenotypeGVCFs", "")
+    log: "log/variant_calling/{reference}/{unit}.{chr}.gatk_all_GenotypeGVCFs.log"
+    threads: 8 
+    resources: mem_gb=2
+    run:
+        gvcfs = _gatk_multi_arg("--variant", input.gvcfs)
+        shell(
+            "gatk "
+            "-Xmx4g "
+            "-T GenotypeGVCFs {gvcfs} "
+            "--intervals " + config["settings"]["capture"] + "/SureSelectHumanAllExonV5plusUTR.target.hg19.interval_list "
+            "-R {input.ref} "
+            "--dbsnp {dbsnp} "
+            "--out {output} "
+            "-nt {threads} "
+            "--disable_auto_index_creation_and_locking_when_reading_rods "
+            "--includeNonVariantSites "
+            "2>&1 | tee {log}")
+
+# get chromosome file if defined in config.json, set to undefined otherwise
+# the file should contain the name of one chromosome per line
+chrfile = config["references"].get("chromosomes","undefined")
+if chrfile == "undefined":
+    chrlist = ['chrM', 'chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+               'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+               'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+               'chr22', 'chrX', 'chrY']
+else:
+    chrlist = open(chrfile).read().splitlines()
+
+rule gatk_CombineVariants_per_unit:
+    input:
+        ref = _get_ref,
+        gvcfs = lambda wildcards: expand(
+                tmp + "/variant_calling/{reference}/{unit}.{chr}.gatk.vcf",
+                reference = wildcards.reference,
+                unit = wildcards.unit, chr = chrlist)
+    output: "variant_calling/{reference}/{unit,[^.]+}.gatk.vcf"
+    params: custom = config["settings"]["gatk"].get("params", "") + 
+                     config["settings"]["gatk"].get("CombineVariants", "")
+    log: "log/variant_calling/{reference}/{unit}.gatk_CombineVariants.log"
+    threads: 8
+    resources: mem_gb=2
+    run:
+        gvcfs = _gatk_multi_arg("--variant", input.gvcfs)
+        shell(
+            "gatk -T CombineVariants {gvcfs} "
+            "-R {input.ref} "
+            "--out {output} "
+            "-nt {threads} "
+            "--assumeIdenticalSamples"
+            "{params.custom} "
+            "2>&1 | tee {log}")
+
+

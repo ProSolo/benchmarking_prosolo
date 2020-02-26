@@ -1,0 +1,131 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+GATK based postprocessing of BAM files. Requires GATK >=3.0.0 in your path.
+Indels can be realigned and base qualities can be recalibrated.
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+references:
+    hg19: '/path/to/indexed/reference/hg19.fa'
+GATKBundle:
+    '2.8':
+        folder: '/path/to/GATKBundle-2.8/'
+        dbsnp: 'name_of_GATKBundle_dbsnpfile.vcf'
+settings:
+    gatk:
+        params: ' '
+
+"""
+
+__original_author__ = "Johannes Köster (http://johanneskoester.bitbucket.org)"
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+def _gatk_multi_arg(flag, files):
+    flag += " "
+    return " ".join(flag + f for f in files)
+
+dbsnp = config["GATKBundle"]["2.8"]["folder"] + config["GATKBundle"]["2.8"]["dbsnp"]
+
+rule gatk_realign_info:
+    input:
+        bam = "mapping/{reference}/samples/{prefix}.sorted.bam",
+        ref = _get_ref,
+        bai = "mapping/{reference}/samples/{prefix}.sorted.bam.bai"
+    output:
+        "mapping/{reference}/samples/{prefix}.realign.intervals"
+    params:
+        custom=config["settings"]["gatk"].get("params", "")
+    log:
+        "log/mapping/{reference}/samples/{prefix}.realign_info.log"
+    threads: 12
+    shell:
+        "gatk -T RealignerTargetCreator "
+        "-I {input.bam} "
+        "-R {input.ref} "
+        "{params.custom} "
+        "-nt {threads} "
+        "-known {dbsnp} "
+        "--disable_auto_index_creation_and_locking_when_reading_rods " #should enable multiple instances of this rule using the dbsnp index file at the same time
+        "-o {output} "
+        "2>&1 | tee {log}"
+
+
+rule gatk_realign_bam:
+    input:
+        ref=_get_ref,
+        intervals = "mapping/{reference}/samples/{prefix}.realign.intervals",
+        bam = "mapping/{reference}/samples/{prefix}.sorted.bam"
+    output:
+        bam = "mapping/{reference}/samples/{prefix}.realigned.sorted.bam"
+    params:
+        custom = config["settings"]["gatk"].get("params", " ") +
+                 config["settings"]["gatk"].get("IndelRealigner", " ")
+    log:
+        "log/mapping/{reference}/samples/{prefix}.realign.log"
+    shell:
+        "gatk -T IndelRealigner "
+        "-I {input.bam} "
+        "-R {input.ref} "
+        "{params.custom} "
+        "--disable_bam_indexing "
+        "-targetIntervals {input.intervals} "
+        "-o {output.bam} "
+        "2>&1 | tee {log}"
+
+
+rule gatk_recalibrate_info:
+    input:
+        "mapping/{reference}/samples/{prefix}.sorted.bam.bai",
+        ref=_get_ref,
+        bam="mapping/{reference}/samples/{prefix}.sorted.bam"
+    output:
+        "mapping/{reference}/samples/{prefix}.recalibrate.grp"
+    params:
+        custom=config["settings"]["gatk"].get("params", "")
+    log:
+        "log/mapping/{reference}/samples/{prefix}.recalibrate_info.log"
+    threads: 8
+    shell:
+        "gatk -T BaseRecalibrator "
+        "-R {input.ref} "
+        "{params.custom} "
+        "-nct {threads} "
+        "-I {input.bam} "
+        "-knownSites {dbsnp} "
+        "--disable_auto_index_creation_and_locking_when_reading_rods " #should enable multiple instances of this rule using the dbsnp index file at the same time
+        "-o {output} "
+        "2>&1 | tee {log}"
+
+
+rule gatk_recalibrate_bam:
+    input:
+        ref=_get_ref,
+        bam="mapping/{reference}/samples/{prefix}.sorted.bam",
+        grp="mapping/{reference}/samples/{prefix}.recalibrate.grp"
+    output:
+        bam = "mapping/{reference}/samples/{prefix}.recalibrated.sorted.bam",
+    params:
+        custom=config["settings"]["gatk"].get("params", "")
+    log:
+        "log/mapping/{reference}/samples/{prefix}.recalibrate.log"
+    threads: 8
+    shell:
+        "gatk -T PrintReads "
+        "-R {input.ref} "
+        "{params.custom} "
+        "-nct {threads} "
+        "--disable_bam_indexing "
+        "-I {input.bam} "
+        "-BQSR {input.grp} "
+        "-o {output.bam} "
+        "2>&1 | tee {log}"
+

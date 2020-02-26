@@ -1,0 +1,295 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Rules for gathering stats on SAM/BAM/CRAM files.
+Requires samtools and picard-tools in your path.
+Also requires accumulateMetrics.bash from scripts/ folder in your path.
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+# needed by rule bam_stats_targets
+settings:
+    capture: '/path/to/folder/with/information/on/capture/targets'
+# needed by rules picard_CalculateHsMetrics and
+# picard_BedToIntervalList -- the second requires a .dict file
+# with the same basename as the fasta file, but this can be
+# generated automatically by the rule picard_CreateSequenceDictionary
+references:
+    hg19: '/path/to/indexed/reference/file/hg19.fa'
+
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+## general stats rules
+
+rule bam_idxstats:
+    input:
+        bam = "{prefix}.bam",
+        index = "{prefix}.bam.bai"
+    output:
+        "{prefix}.idxstats.txt"
+    shell:
+        "samtools idxstats {input.bam} > {output}"
+
+
+rule bam_stats:
+    input:
+        "{prefix}.bam"
+    output:
+        "{prefix}.stats.txt"
+    shell:
+        "samtools stats {params} {input} > {output}"
+
+
+rule bam_measure_insert_size:
+    input:
+        "{prefix}.sorted.bam"
+    output:
+        txt="{prefix}.insert_size.txt",
+        pdf="{prefix}.insert_size_histogram.pdf"
+    shell:
+        "picard CollectInsertSizeMetrics "
+        "INPUT={input} "
+        "OUTPUT={output.txt} "
+        "HISTOGRAM_FILE={output.pdf}"
+
+
+rule bam_mark_duplicates:
+    input:
+        "{prefix}.sorted.bam"
+    output:
+        bam = "{prefix}.MarkDup.sorted.bam",
+        metrics = "{prefix}.MarkDupMetrics.txt"
+    log: "log/{prefix}.MarkDup.log"
+    resources: 
+        mem_gb = 4
+    shell:
+        "picard MarkDuplicatesWithMateCigar "
+        "INPUT={input} "
+        "OUTPUT={output.bam} "
+        "MINIMUM_DISTANCE=500 "
+        "METRICS_FILE={output.metrics} "
+        "REMOVE_DUPLICATES=false "
+        "2>&1 | tee {log}"
+
+
+rule accumulate_mark_duplicate_stats:
+    input:
+        files = lambda wildcards: expand(
+            "{path}{run}.map.MarkDupMetrics.txt",
+            path = wildcards.path, 
+            run = config["runs"].keys() )
+    output:
+        expand("{{path}}{project}.MarkDupMetrics.tsv",
+                project = config["project_name"] )
+    shell:
+        "accumulateMetrics.bash "
+        ".map.MarkDupMetrics.txt "
+        "LIBRARY "
+        "{input.files} "
+        ">{output}"
+
+
+rule mosdepth_coverage_distribution_WGS:
+    input:
+        bam = "mapping/{reference}/samples/{sample}.bps.sorted.bam",
+        bai = "mapping/{reference}/samples/{sample}.bps.sorted.bam.bai"
+    output: "mapping/{reference}/samples/{sample}.bps.mosdepth.global.dist.txt"
+    log: "log/mapping/{reference}/samples/{sample}.mosdepth.global.log"
+    conda:
+        "envs/mosdepth.yaml"
+    threads: 3
+    shell:
+        "( mosdepth "
+        "  --no-per-base "
+        "  --fast-mode "
+        "  --threads {threads} "
+        "  mapping/{wildcards.reference}/samples/{wildcards.sample}.bps "
+        "  {input.bam} "
+        ") 2> {log} "
+
+
+rule mosdepth_coverage_distribution_WX:
+    input:
+        bam = "mapping/{reference}/samples/{sample}.bps.sorted.bam",
+        bai = "mapping/{reference}/samples/{sample}.bps.sorted.bam.bai",
+        capture = config["settings"]["capture"] + "/{capture}.{reference}.bed"
+    output: "mapping/{reference}/samples/{sample}.bps.{capture}.mosdepth.region.dist.txt"
+    log: "log/mapping/{reference}/samples/{sample}.bps.{capture}.mosdepth.region.log"
+    conda:
+        "envs/mosdepth.yaml"
+    threads: 3
+    shell:
+        "( mosdepth "
+        "  --no-per-base "
+        "  --fast-mode "
+        "  --threads {threads} "
+        "  --by {input.capture} "
+        "  mapping/{wildcards.reference}/samples/{wildcards.sample}.bps.{wildcards.capture} "
+        "  {input.bam} "
+        ") 2> {log} "
+
+
+rule bam_remove_duplicates:
+    input:
+        "{prefix}.sorted.bam"
+    output:
+        bam = "{prefix}.RmDup.sorted.bam",
+        metrics = "{prefix}.RmDupMetrics.txt"
+    log: "log/{prefix}.MarkDup.log"
+    shell:
+        "picard MarkDuplicatesWithMateCigar "
+        "INPUT={input} "
+        "OUTPUT={output.bam} "
+        "MINIMUM_DISTANCE=250 "
+        "METRICS_FILE={output.metrics} "
+        "REMOVE_DUPLICATES=true"
+        "2>&1 | tee {log}"
+
+
+rule accumulate_rm_duplicate_stats:
+    input:
+        files = lambda wildcards: expand(
+            "{path}{run}.map.RmDupMetrics.txt",
+            path = wildcards.path, 
+            run = config["runs"].keys() )
+    output:
+        expand("{{path}}{project}.RmDupMetrics.tsv",
+                project = config["project_name"] )
+    shell:
+        "accumulateMetrics.bash "
+        ".map.RmDupMetrics.txt "
+        "LIBRARY "
+        "{input.files} "
+        ">{output}"
+
+
+## capture targets' stats rules
+
+
+# get or set default capture folder and prefix in config.settings
+config["settings"].setdefault("capture",
+    "/net/refdata/HomoSapiens/hg19/annotation/capture")
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+def _get_dict(wildcards):
+    return config["references"][wildcards.reference].rstrip('FASTfast') + "dict"
+    
+
+rule bam_stats_targets:
+    """
+    This rule should work from samtools 1.3 upwards.
+    """
+    input:
+        bam = "mapping/{reference}/samples/{prefix}.bam",
+        target = lambda wildcards: expand(
+                "{capture}/{probeset}.{target}.noHeader.{reference}.interval_list",
+                capture = config["settings"]["capture"],
+                probeset = wildcards.probeset, 
+                target = wildcards.target,
+                reference = wildcards.reference)
+    output:
+        "mapping/{reference}/samples/{prefix}.{probeset,[^.]+}.{target,(target|bait)}.stats.txt"
+    shell:
+        "samtools stats --target-regions {input.target} {input.bam} > {output}"
+
+rule picard_CollectHsMetrics:
+    input:
+        bait = lambda wildcards: expand(
+                "{capture}/{probeset}.bait.{reference}.interval_list",
+                capture = config["settings"]["capture"],
+                probeset = wildcards.probeset, reference = wildcards.reference),
+        target = lambda wildcards: expand(
+                "{capture}/{probeset}.target.{reference}.interval_list",
+                capture = config["settings"]["capture"],
+                probeset = wildcards.probeset, reference = wildcards.reference),
+        bam = "mapping/{reference}/samples/{prefix}.bam",
+        ref = _get_ref
+    output:
+        main = "mapping/{reference}/samples/{prefix}.{probeset,[^.]+}.hs_metrics",
+        per_target = "mapping/{reference}/samples/{prefix}.{probeset,[^.]+}.per_target"
+    threads: 4
+    log:
+        "log/mapping/{reference}/samples/{prefix}.{probeset}.CollectHsMetrics.log"
+    shell:
+        "picard -Xmx4g CollectHsMetrics "
+        "INPUT={input.bam} "
+        "BAIT_INTERVALS={input.bait} "
+        "TARGET_INTERVALS={input.target} "
+        "OUTPUT={output.main} "
+        "REFERENCE_SEQUENCE={input.ref} "
+        "PER_TARGET_COVERAGE={output.per_target} "
+        "&> {log} "
+
+
+rule accumulate_hs_metrics_stats:
+    input:
+        files = lambda wildcards: expand(
+            "{path}{sample}{infix}.{capture}.hs_metrics",
+            path = wildcards.path, 
+            sample = config["samples"].keys(),
+            infix = wildcards.infix,
+            capture = wildcards.capture )
+    output:
+        expand("{{path}}{project}{{infix}}.{{capture}}.HsMetrics.tsv",
+                project = config["project_name"] )
+    shell:
+        "accumulateMetrics.bash "
+        "{wildcards.infix}.{config[settings][capture]}.hs_metrics "
+        "BAIT_SET "
+        "{input.files} "
+        ">{output}"
+
+
+## helper rules for references and interval lists
+
+
+rule fasta_index:
+    input:
+        "{prefix}.{suffix}"
+    output:
+        "{prefix}.{suffix,(fasta|fa)}.fai"
+    shell:
+        "samtools faidx {input}"
+
+
+rule picard_CreateSequenceDictionary:
+    input:
+        "{prefix}.fa"
+    output:
+        "{prefix}.dict"
+    log:
+        "log/{prefix}.CreateSequenceDictionary.log"
+    shell:
+        "picard CreateSequenceDictionary "
+        "REFERENCE={input} "
+        "OUTPUT={output} "
+        "&> {log} "
+        
+
+rule picard_BedToIntervalList:
+    """
+    Create a Picard interval list from a bed file.
+    """
+    input:
+        bed = "{path}/{prefix}.{reference}.bed",
+        dict = _get_dict
+    output: 
+        "{path}/{prefix,[^./]+}.{reference,[^.]+}.interval_list"
+    log:
+        "log/{path}/{prefix}.{reference}.BedToIntervalList.log" 
+    shell:
+        "picard BedToIntervalList "
+        "INPUT={input.bed} "
+        "SEQUENCE_DICTIONARY={input.dict} "
+        "OUTPUT={output} "
+        "&> {log} "
+

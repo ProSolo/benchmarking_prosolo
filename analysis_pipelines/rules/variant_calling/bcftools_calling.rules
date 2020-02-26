@@ -1,0 +1,258 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+Using at least bcftools 1.4 available in your path as `bcftools`
+
+Configuration should be provided in YAML format (e.g. config.yaml)
+and loaded in the Snakefile.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+# tmp folder definition for the local system, will default to "/net/scratch"
+tmp = config["folders"].get("tmp", "/local/tmp")
+
+
+# get or set empty settings in config and config.settings
+#config.setdefault("settings", {})
+#config["settings"].setdefault("bcftools_filter", {})
+
+# get or provide bctools defaults
+#config["settings"]["bcftools_filter"].setdefault("MinQual", "20")
+
+# get chromosome file if defined in config.json, set to undefined otherwise
+# the file should contain the name of one chromosome per line
+chrfile = config["references"].get("chromosomes","undefined")
+
+if chrfile == "undefined":
+    chrlist = ['chrM', 'chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+               'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+               'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+               'chr22', 'chrX', 'chrY']
+else:
+    chrlist = open(chrfile).read().splitlines()
+
+
+rule bcftools_call_per_sample_per_chr:
+    input:
+        dbsnp,
+        ref = _get_ref,
+        bam = "mapping/{reference}/samples/{sample}.bps.sorted.bam",
+        bai = "mapping/{reference}/samples/{sample}.bps.sorted.bam.bai"
+    output:
+        bcf = tmp + "/variant_calling/{reference}/{sample}.{chr}.bcftools.bcf"
+    params:
+        custom = config["settings"]["gatk"].setdefault("params", "")
+    log:
+        "log/variant_calling/{reference}/{sample}.{chr}.bcftools_call.log"
+    threads: 1 
+    shell:
+        "mkdir -p variant_calling/{wildcards.reference}; "
+        "bcftools mpileup "
+        " -f {input.ref} "
+        " -r {wildcards.chr} " # restrict mpileup to wanted chromosome
+        " -Ou " # uncompressed BCF-output, quickest input into bcftools call
+        " {input.bam} | "
+        "bcftools call "
+        " -m " # use newer multiallelic calling model
+        " -v " # output only variant sites
+        " -Ob " # output in BCF format
+        " -o {output.bcf}"
+
+
+rule bcftools_invariant_sites_per_chr:
+    """
+    Use bcftools mpileup to gather all sites with coverage, but without any
+    evidence of a non-reference nucleotide. These are needed to balance the
+    bias towards non-reference sites that GATK introduces in our ground
+    truth genotypes.
+    """
+    input:
+        ref = lambda wildcards: config["references"][wildcards.reference],
+        bam = "mapping/{reference}/samples/{sample}.bps.sorted.bam"
+    output:
+        bcf = "variant_calling/{reference}/{sample}.{chrom}.bcftools_mpileup_non_variant.bcf"
+    log: "log/variant_calling/{reference}/{sample}.{chrom}.bcftools_mpileup_non_variant.log"
+    threads: 3
+    shell:
+        "echo '##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">' "
+        " >variant_calling/{wildcards.reference}/{wildcards.sample}.{wildcards.chrom}.bcftools_mpileup_non_variant.header; "
+        "( bcftools mpileup "
+        "    --skip-indels "
+        "    --fasta-ref {input.ref} "
+        "    --regions {wildcards.chrom} "
+        "    --annotate FORMAT/DP "
+        "    {input.bam} | "
+        "  bcftools view "
+        "    --include 'ALT==\"<*>\"' | " # ensures that the only possible ALT allele is the empty one
+        "  bcftools view "
+        "    --exclude 'FORMAT/DP[*]<25' | " # ensures that none of the samples has a coverage lower than 25 (this is an arbitrary ad-hoc cutoff to ensure that no ALT allele is missed by chance, while generating sufficient numbers of high confidence HOM REF sites)
+        "  bcftools annotate "
+        "    --header-lines variant_calling/{wildcards.reference}/{wildcards.sample}.{wildcards.chrom}.bcftools_mpileup_non_variant.header | "
+        "  sed -r "
+        "    -e 's/PL:DP/GT:PL:DP/' "
+        "    -e 's/\\t([0-9]+,[0-9]+,[0-9]+:[0-9]+)/\\t0\/0:\\1/g' | "
+        "  bcftools annotate "
+        "    -x ^FORMAT/GT | "
+        "  bcftools view "
+        "    -t ^chrM "
+        "    -O b -o {output.bcf} "
+        ") 2> {log}"
+
+
+rule gatk_recalibrated_to_bcf:
+    input:
+        "variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated.vcf"
+    output:
+        "variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated.bcf"
+    log:
+        "log/variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated.vcf_to_bcf.log"
+    shell:
+        "( bcftools view "
+        "    -O v "
+        "    -t ^chrM "
+        "    {input} | "
+        "  bcftools annotate "
+        "    -x ^FORMAT/GT "
+        "    -O b -o {output} "
+        ") 2> {log}"
+
+
+rule gatk_recalibrated_minGQ_30_to_bcf:
+    input:
+        "variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated.vcf"
+    output:
+        "variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated.minGQ_30.bcf"
+    log:
+        "log/variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated.vcf_minGQ_30_to_bcf.log"
+    shell:
+        "( bcftools view "
+        "    -O v "
+        "    -t ^chrM "
+        "    --include 'FMT/GQ>=30' "
+        "    {input} | "
+        "  bcftools annotate "
+        "    -x ^FORMAT/GT "
+        "    -O b -o {output} "
+        ") 2> {log}"
+
+
+
+rule merge_gatk_and_bcftools_non_variant:
+    """
+    Pipeline-/analysis-specific rule to merge the outputs of GATK alternative
+    allele calling with the non variant sites generated by bcftools as a ground
+    truth list with high quality genotypes for single cell calling.
+    """
+    input:
+        gatk = "variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated{filter}.bcf",
+        gatk_idx = "variant_calling/{reference}/{sample}.gatk.indel_recalibrated.snp_recalibrated{filter}.bcf.csi",
+        non_vars = lambda wildcards:
+            expand("variant_calling/{reference}/{sample}.{chrom}.bcftools_mpileup_non_variant.bcf",
+                reference = wildcards.reference,
+                sample = wildcards.sample,
+                chrom = chrlist
+                ),
+        non_vars_idx = lambda wildcards:
+            expand("variant_calling/{reference}/{sample}.{chrom}.bcftools_mpileup_non_variant.bcf.csi",
+                reference = wildcards.reference,
+                sample = wildcards.sample,
+                chrom = chrlist
+                )
+    output:
+        bcf = "variant_calling/{reference}/{sample,[^\.]+}.bulk.ground_truth{filter, (\.minGQ_30|)}.bcf"
+    log: "log/variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.log"
+    threads: 3 #bcftools concat does not seem to use more than 3 threads, anyways
+    shell:
+        "bcftools concat "
+        " --threads {threads} "
+        " --allow-overlaps "
+        " -O v "
+        " -o {output.bcf} "
+        " {input.gatk} {input.non_vars} "
+        "2>&1 | tee {log} "
+
+
+rule bulk_ground_truth_to_tsv_gz:
+    input:
+        "variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.bcf"
+    output:
+        "variant_calling/{reference}/{sample,[^\.]+}.bulk.ground_truth{filter, (\.minGQ_30|)}.tsv.gz"
+    log:
+        "log/variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.to_tsv_gz.log"
+    shell:
+        "( bcftools query -f '%CHROM\t%POS[\t%GT]\n' {input} | gzip --stdout >> {output} ) 2>> {log}"
+
+
+rule Hoell_ground_truth_to_het_snps_only:
+    input:
+        ground_truth = config["references"]["ground_truth_bcf"],
+    output:
+        "variant_calling/{reference}/{sample,[^\.]+}.ground_truth.het_snps_only.bcf"
+    log:
+        "log/variant_calling/{reference}/{sample}.ground_truth.het_snps_only.log"
+    shell:
+        "( bcftools view --genotype het -e 'TYPE!=\"snp\"' -O b -o {output} {input} ) 2>> {log}"
+
+
+rule bulk_ground_truth_to_het_snps_only:
+    input:
+        "variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.bcf"
+    output:
+        "variant_calling/{reference}/{sample,[^\.]+}.bulk.ground_truth{filter, (\.minGQ_30|)}.het_snps_only.bcf"
+    log:
+        "log/variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.het_snps_only.log"
+    shell:
+        "( bcftools view --genotype het -e 'TYPE!=\"snp\"' -O b -o {output} {input} ) 2>> {log}"
+
+
+rule ground_truth_het_snps_to_read_dropout_rate:
+    input:
+        ground_truth = "variant_calling/{reference}/{sample}.{bulk}ground_truth{filter}.het_snps_only.bcf",
+        bam = "mapping/{reference}/samples/{single_cell}.bps.sorted.bam",
+        bai = "mapping/{reference}/samples/{single_cell}.bps.sorted.bam.bai",
+        ref = _get_ref
+    output:
+        "variant_calling/{reference}/{single_cell,[^\.]+}.{sample,[^\.]+}.{bulk, (bulk\.|)}ground_truth{filter, (\.minGQ_30|)}.het_snps_only.allele_dropout_rate.tsv"
+    params:
+        tmp = "variant_calling/{reference}/{single_cell}.{sample}.{bulk}ground_truth{filter}.het_snps_only.allele_dropout_rate.all_calls_tmp.bcf"
+    log:
+        "log/variant_calling/{reference}/{single_cell}.{sample}.{bulk}ground_truth{filter}.het_snps_only.allele_dropout_rate.log"
+    shell:
+        '( bcftools mpileup '
+        '   --regions-file <( bcftools view {input.ground_truth} ) '
+        '   --fasta-ref {input.ref} '
+        '   --count-orphans '
+        '   --no-BAQ '
+        '   --max-depth 2000 '
+        '   --min-BQ 0 '
+        '   --annotate INFO/AD '
+        '   -O b '
+        '   {input.bam} | '
+        '  bcftools view '
+        '   -i "( TYPE=\'snp\' || TYPE=\'ref\' ) && INFO/DP>6" ' # INFO/DP>6 ensures that the probability of not sampling one allele in sequencing even though it was amplified is really small (with the overly simple assumption of an amplified allele frequency of 0.5 and drawing with replacement, this would be 2×0,5^7 = 0,015625)
+        '   -O b '
+        '   -o {params.tmp}; '
+        '  DROPOUTS=`bcftools view '
+        '    --no-header '
+        '    -e "MAX(INFO/AD)<INFO/DP" '
+        '    {params.tmp} | '
+        '   wc -l `;'
+        '  ALL=`bcftools view '
+        '    --no-header '
+        '    {params.tmp} | '
+        '   wc -l`; '
+        'echo -e "CELL\tBULK\tFILTER\tCANDIDATES_TYPE\tALLELE_DROPOUT_CALLS\tALL_CALLS\tALLELE_DROPOUT_RATE" > {output};'
+        'echo -n -e "{wildcards.single_cell}\t{wildcards.sample}\t{wildcards.filter}\tground_truth_het_allele_dropout\t${{DROPOUTS}}\t${{ALL}}\t" >> {output};'
+        'echo "$DROPOUTS / $ALL" | bc -l >> {output}'
+        " ) 2>> {log}"
+
+
+

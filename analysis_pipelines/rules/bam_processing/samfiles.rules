@@ -1,0 +1,95 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Rules for modifying SAM or BAM files.
+Requires samtools and picard-tools in your path.
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+# needed by rule bam_sort
+folders:
+    tmp: '/path/to/local/temporary/folder'
+# needed by rule sample_merge
+samples:
+    sample1:
+        - run1
+        - run2
+
+"""
+
+__original_author__ = "Johannes Köster (http://johanneskoester.bitbucket.org)"
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+# tmp folder definition for the local system, will default to "/net/scratch"
+tmp= config["folders"].get("tmp", "/net/scratch")
+
+
+rule bam_index:
+    input:
+        "{prefix}.sorted.bam"
+    output:
+        "{prefix}.sorted.bam.bai"
+    shell:
+        "samtools index {input}"
+
+
+#rule bam_sort:
+#    input:
+#        "{prefix}.bam"
+#    output:
+#        "{prefix}.sorted.bam"
+#    threads: 3
+#    shell:
+#        """
+#        TMP_PRE={wildcards.prefix}
+#        mkdir -p {tmp}/bam_sort/${{TMP_PRE%/*}}
+#        samtools sort -@ {threads} -T {tmp}/bam_sort/{wildcards.prefix} -o {output} {input}
+#        """
+
+
+rule bam_sort_name:
+    input:
+        "{prefix}.bam"
+    output:
+        "{prefix}.namesorted.bam"
+    threads: 3
+    shell:
+        """
+        TMP_PRE={wildcards.prefix}
+        mkdir -p {tmp}/bam_sort/${{TMP_PRE%/*}}
+        samtools sort -n -@ {threads} -T {tmp}/bam_sort/{wildcards.prefix} -o {output} {input}
+        """
+
+
+#rule sam_to_bam:
+#    input:
+#        "{prefix}.sam"
+#    output:
+#        "{prefix}.bam"
+#    priority: .9
+#    shell:
+#        "samtools view -Sbh {input} > {output}"
+
+
+rule sample_merge:
+    """
+    Merge bam files for multiple runs into one for the given sample.
+    If the sample has only one run, a symlink will be created.
+    """
+    input:
+        lambda wildcards: expand(
+            "mapping/{reference}/runs/{run}.bpr.sorted.bam",
+            reference = wildcards.reference, run=config["samples"][wildcards.sample])
+    output:
+        "mapping/{reference}/samples/{sample,[^/.]+}.bpr.sorted.bam"
+    threads: 1
+    run:
+        if len(input) > 1:
+            shell("samtools merge {output} {input}")
+        else:
+            shell("ln -s ../../../{input} {output} && touch -h {output}")
+

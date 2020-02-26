@@ -1,0 +1,6 @@
+1    CCS_1_W CCS_2_M CCS_3_W 2
+1    CCS_2_M 0   0   1
+1    CCS_3_W 0   0   2
+1    CCS_4_M CCS_2_M CCS_3_W 1
+1    CCS_5_W CCS_2_M CCS_3_W 2
+1    CCS_6_M CCS_2_M CCS_3_W 1

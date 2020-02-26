@@ -1,0 +1,95 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Read mapping with BWA MEM (http://bio-bwa.sourceforge.net).
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+# this should be standard for most tools to be able to specifify extra parameters
+# via the config file
+settings: 
+    bwa_mem: ' '
+# needed for any mapping/alignment rule
+references:
+    hg19: '/path/to/indexed/reference/file/hg19.fa'
+# needed for the mapping of runs to samples to properly annotate the
+# readgroups in the output
+samples:
+    sample1:
+        - run1
+        - run2
+    sample2:
+        - run3
+
+"""
+
+
+__original_author__ = "Johannes Köster (http://johanneskoester.bitbucket.org)"
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+bwa_mem = config["settings"].setdefault("bwa_mem", "")
+
+RUN_TO_SAMPLE = {
+    run: sample for sample, runs in config["samples"].items()
+    for run in runs}
+
+def _get_platform(wildcards):
+    return config["sample_annotations"][RUN_TO_SAMPLE[wildcards.run.rstrip('.P')]]["platform"]
+
+from snakemake.exceptions import MissingInputException
+
+rule bwa_mem_map_trimmomatic_S:
+    """
+    This is a bypass-rule to deal with the extra fastq.gz-file generated for reads
+    that are unpaired after applying trimmomatic quality trimming.
+    """
+    input:
+        lambda wildcards: config["references"][wildcards.reference],
+        "preprocessing/runs/{run}.{tag}.pp.fastq.gz"
+    output:
+        "mapping/{reference}/runs/{run}.{tag,SE?}.bwamem.bam"
+    params:
+        sample=lambda wildcards: RUN_TO_SAMPLE[wildcards.run],
+        platform=_get_platform,
+        custom=bwa_mem
+    log:
+        "log/mapping/{reference}/{run}.{tag}.log"
+    threads: 8
+    shell:
+        "bwa mem {params.custom} "
+        r"-R '@RG\tID:{wildcards.run}\tSM:{params.sample}\tPL:{params.platform}' "
+        "-t {threads} {input} 2> >(tee {log} >&2) | "
+        "samtools view -Sbh - > {output}"
+
+rule bwa_mem_map:
+    """
+    Standard bwa mem mapping rule. Should be able to deal with any paired end and
+    single end reads that are correctly documented in the config.json file. Standard
+    recommended usage would be to use config["infix"]["pair"] = [ ".1", ".2" ] for
+    paired-end reads and config["infix"]["single"] = [".0"] for single end reads
+    and specify for each config["run"] if it is "single" or "pair".
+    """
+    input:
+        lambda wildcards: config["references"][wildcards.reference],
+        lambda wildcards: expand(
+                "preprocessing/runs/{run}{read}.pp.fastq.gz",
+                run = wildcards.run,
+                read = config["infix"][ config["runs"][wildcards.run.rstrip('.P')] ])
+    output:
+        "mapping/{reference}/runs/{run}.bwamem.bam"
+    params:
+        sample=lambda wildcards: RUN_TO_SAMPLE[wildcards.run.rstrip('.P')],
+        platform=_get_platform,
+        custom=bwa_mem
+    log:
+        "log/mapping/{reference}/{run}.log"
+    threads: 8
+    shell:
+        "bwa mem {params.custom} "
+        r"-R '@RG\tID:{wildcards.run}\tSM:{params.sample}\tPL:{params.platform}' "
+        "-t {threads} {input} 2> >(tee {log} >&2) | "
+        "samtools view -Sbh - > {output}"
+

@@ -1,0 +1,91 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Rules for analysing fasta files with FastQC.
+
+"""
+
+__original_author__ = "Johannes Köster (http://johanneskoester.bitbucket.org)"
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+rule fastqc:
+    input:
+        "preprocessing/runs/{run}{rest}.fastq.gz"
+    output:
+        "preprocessing/runs/fastqc/{run,[^.]+}{rest}_fastqc.zip",
+        "preprocessing/runs/fastqc/{run,[^.]+}{rest}_fastqc.html"
+    shell:
+        """
+        fastqc -o preprocessing/runs/fastqc --nogroup {input}
+        """
+
+def _return_unit_runs(unit, library):
+    list = []
+    if unit == config['project_name']:
+        for smp in config['samples']:
+            for run in config['samples'][ smp ]:
+                if ( config['runs'][ run ] == library ):
+                    list.append( run )
+    elif unit in config['batches']:
+        for smp in config['batches'][ unit ]:
+            for run in config['samples'][ smp ]:
+                if ( config['runs'][ run ] == library ):
+                    list.append( run )
+    elif unit in config['samples']:
+        for run in config['samples'][ unit ]:
+            if ( config['runs'][ run ] == library ):
+                list.append( run )
+    elif unit in config['runs']:
+        if ( config['runs'][ unit ] == library ):
+            list.append( unit )
+    return list
+
+rule summarise_forward_kmers:
+    input: lambda wildcards:
+            expand("preprocessing/runs/fastqc/{run}.P{infix}.pp_fastqc.html",
+                run = _return_unit_runs( wildcards.unit, "pair" ),
+                infix = config["infix"]["pair"][0])
+    output:
+        "preprocessing/runs/{unit}.pp.forward.kmers"
+    shell:
+        """
+        FastQC_CountKmers.bash {input} >{output}
+        """
+
+rule summarise_reverse_kmers:
+    input: lambda wildcards:
+            expand("preprocessing/runs/fastqc/{run}.P{infix}.pp_fastqc.html",
+                run = _return_unit_runs( wildcards.unit, "pair" ),
+                infix = config["infix"]["pair"][1])
+    output:
+        "preprocessing/runs/{unit}.pp.reverse.kmers"
+    shell:
+        """
+        FastQC_CountKmers.bash {input} >{output}
+        """
+
+rule summarise_singleton_kmers:
+    input: lambda wildcards:
+            expand("preprocessing/runs/fastqc/{run}.S.pp_fastqc.html",
+                run = _return_unit_runs( wildcards.unit, "pair" ) )
+    output:
+        "preprocessing/runs/{unit}.pp.singleton.kmers"
+    shell:
+        """
+        FastQC_CountKmers.bash {input} >{output}
+        """
+
+rule summarise_single_kmers:
+    input: lambda wildcards:
+            expand("preprocessing/runs/fastqc/{run}.SE.pp_fastqc.html",
+                run = _return_unit_runs( wildcards.unit, "single" ) )
+    output:
+        "preprocessing/runs/{unit}.pp.single.kmers"
+    shell:
+        """
+        FastQC_CountKmers.bash {input} >{output}
+        """
+

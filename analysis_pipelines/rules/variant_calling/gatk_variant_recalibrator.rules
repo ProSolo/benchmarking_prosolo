@@ -1,0 +1,152 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+GATK variant recalibration using the GATK Best Practices.
+Needs at least GATK 3.0.0, available in your PATH as "gatk".
+
+Configuration should be provided in YAML format and specified in the Snakefile.
+For a commented example, see config.yaml in the directory pipelines, especially:
+
+TODO: document necessary configs
+
+"""
+
+
+__original_author__ = "Johannes Köster (http://johanneskoester.bitbucket.org)"
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+# provide GATK Bundle defaults
+config.setdefault("GATKBundle", "")
+config["GATKBundle"].setdefault("2.8", "")
+gatk_bundle_path = config["GATKBundle"]["2.8"].setdefault("folder", 
+                                "/net/refdata/HomoSapiens/hg19_GATKBundle-2.8")
+# provide GATKBundle-2.8 default in config
+config.setdefault("GATKBundle", {})
+dbsnp = gatk_bundle_path + config["GATKBundle"]["2.8"].setdefault("dbsnp",
+                                                        "dbsnp_138.hg19.vcf")
+g1k = gatk_bundle_path + config["GATKBundle"]["2.8"].setdefault("g1k",
+                                "1000G_phase1.snps.high_confidence.hg19.vcf")
+hapmap = gatk_bundle_path + config["GATKBundle"]["2.8"].setdefault("hapmap",
+                                                        "hapmap_3.3.hg19.vcf")
+mills = gatk_bundle_path + config["GATKBundle"]["2.8"].setdefault("mills",
+                            "Mills_and_1000G_gold_standard.indels.hg19.vcf")
+omni = gatk_bundle_path + config["GATKBundle"]["2.8"].setdefault("omni",
+                                                    "1000G_omni2.5.hg19.vcf")
+
+def _get_GATKBundle(wildcards):
+    if wildcards.type == "snp":
+        return [ dbsnp, g1k, hapmap, omni ]
+    else:
+        return [ mills ]
+
+
+def _get_recal_params(wildcards):
+    if wildcards.type == "snp":
+        resources = (
+            "-resource:hapmap,known=false,training=true,truth=true,prior=15.0 {0}/{hapmap} "
+            "-resource:omni,known=false,training=true,truth=true,prior=12.0 {0}/{omni} "
+            "-resource:1000G,known=false,training=true,truth=false,prior=10.0 {0}/{g1k} "
+            "-resource:dbsnp,known=true,training=false,truth=false,prior=2.0 {0}/{dbsnp} "
+        ).format(config["GATKBundle"]["2.8"]["folder"], **config["GATKBundle"]["2.8"])
+        base_snps = ( "-mode SNP "
+                    "-an QD "
+                    "-an MQ "
+                    "-an FS "
+                    "-an SOR "
+                    "-an MQRankSum "
+                    "-an ReadPosRankSum ")
+        if config["sample_annotations"][wildcards.unit]["library_prep"] == "WX":
+            parameters = base_snps 
+        elif config["sample_annotations"][wildcards.unit]["library_prep"] == "WGS":
+            parameters = (base_snps + "-an DP ")
+    elif wildcards.type == "indel":
+        resources = (
+            "-resource:mills,known=false,training=true,truth=true,prior=12.0 {0}/{mills} "
+            "-resource:dbsnp,known=true,training=false,truth=false,prior=2.0 {0}/{dbsnp} "
+        ).format(config["GATKBundle"]["2.8"]["folder"], **config["GATKBundle"]["2.8"])
+        base_indels = ( "-mode INDEL "
+                        "-an QD "
+                        "-an FS "
+                        "-an SOR "
+                        "-an MQRankSum "
+                        "-an ReadPosRankSum ")
+        if config["sample_annotations"][wildcards.unit]["library_prep"] == "WX":
+            parameters = base_indels
+        elif config["sample_annotations"][wildcards.unit]["library_prep"] == "WGS":
+            parameters = (base_indels + "-an DP ")
+    return resources + parameters
+
+
+rule gatk_variant_recalibration:
+    input:
+        _get_GATKBundle,
+        ref=_get_ref,
+        vcf="variant_calling/{reference}/{unit}{extra}.vcf"
+    output:
+        recal = 
+            temp("variant_calling/{reference}/{unit,[^.]+}{extra,(\.[^.]+)*}.{type,(snp|indel)}.recal"),
+        tranches = 
+            temp("variant_calling/{reference}/{unit,[^.]+}{extra,(\.[^.]+)*}.{type,(snp|indel)}.tranches"),
+        plotting = 
+            temp("variant_calling/{reference}/{unit,[^.]+}{extra,(\.[^.]+)*}.{type,(snp|indel)}.plots.R")
+    params:
+        _get_recal_params,
+        config["settings"]["gatk"].get("params", "")
+    log:
+        "log/variant_calling/{reference}/{unit}{extra}.{type}_recalibrate_info.log"
+    threads: 8
+    resources:
+        mem_gb = 4
+    shell:
+        "gatk -Xmx{resources.mem_gb}g -T VariantRecalibrator -R {input.ref} "
+        "-input {input.vcf} "
+        "{params} -nt {threads} "
+        "-tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 90.0 "
+        "-recalFile {output.recal} "
+        "-tranchesFile {output.tranches} "
+        "-rscriptFile {output.plotting} "
+        "2>&1 | tee {log}"
+
+
+rule gatk_apply_variant_recalibration:
+    input:
+        ref=_get_ref,
+        vcf="variant_calling/{reference}/{sample}{extra}.vcf",
+        recal="variant_calling/{reference}/{sample}{extra}.{type}.recal",
+        tranches="variant_calling/{reference}/{sample}{extra}.{type}.tranches"
+    output:
+        "variant_calling/{reference}/{sample,[^.]+}{extra,(\.[^.]+)*}.{type,(snp|indel)}_recalibrated.vcf"
+    params:
+        mode=lambda wildcards: wildcards.type.upper(),
+        custom=config["settings"]["gatk"].get("params", "")
+    log:
+        "log/variant_calling/{reference}/{sample}{extra}.{type}_recalibrate.log"
+    threads: 8
+    resources:
+        mem_gb = 4
+    shell:
+        "gatk -Xmx{resources.mem_gb}g -T ApplyRecalibration -R {input.ref} -nt {threads} "
+        "-input {input.vcf} -mode {params.mode} {params.custom} "
+        "-recalFile {input.recal} --ts_filter_level 99.9 "
+        "-tranchesFile {input.tranches} -o {output} "
+        "2>&1 | tee {log}"
+
+rule recalibrated_to_tsv_gz:
+    input:
+        "variant_calling/{reference}/{unit}{extra,(\.[^.]+)*}.indel_recalibrated.snp_recalibrated.vcf"
+    output:
+        "variant_calling/{reference}/{unit}{extra,(\.[^.]+)*}.indel_recalibrated.snp_recalibrated.tsv.gz"
+    log:
+        "log/variant_calling/{reference}/{unit}{extra,(\.[^.]+)*}.indel_recalibrated.snp_recalibrated.to_tsv_gz.log"
+    shell:
+        "( bcftools query -f '%CHROM\t%POS[\t%GT]\n' {input} | gzip --stdout >> {output} ) 2>> {log}"
+
+
+

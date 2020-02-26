@@ -1,0 +1,28 @@
+"""
+This file aggregates all rules for processing of bam files that are
+specified in the folder "bam_processing". If you add a file to that
+folder, you should also add the corresponding include statement here.
+
+Configuration of the processes to run in this stage should be provided
+in YAML format and specified in the Snakefile. For a commented example,
+see config.yaml in the directory pipelines, in particular:
+
+stages:
+    bam_proc_per_run: ''
+
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+include: "bam_processing/gatk.rules"
+include: "bam_processing/samfiles.rules"
+include: "bam_processing/stats.rules"
+
+rule bam_proc_per_run_out:
+    input: 
+        expand("mapping/{{reference}}/runs/{{run}}.map{bpr_steps}.sorted.bam",
+               bpr_steps=config["stages"]["bam_proc_per_run"])
+    output: "mapping/{reference}/runs/{run}.bpr.sorted.bam"
+    shell: "ln -s ../../../{input} {output} && touch -h {output}"
+

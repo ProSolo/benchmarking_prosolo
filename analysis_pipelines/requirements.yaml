@@ -1,0 +1,24 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+bcftools=1.6=0
+beagle=4.0_06Jun17=1
+bwa=0.7.15=1
+cutadapt=1.14=py36_0
+famseq=1.0.3=0
+fastqc=0.11.5=1
+gatk=3.6=5
+htslib=1.4.1=0
+picard=2.9.2=py36_1
+polymutt=0.18=0
+prosolo=0.5.0=h2138d71_0
+r-argparser=0.4=r3.4.1_0
+r-base=3.4.1=2
+r-cli=1.0.0=r3.4.1_0
+r-rcolorbrewer=1.1_2=r3.4.1_0
+r-tidyverse=1.1.1=r3.4.1_0
+samtools=1.4.1=0
+snakemake=4.7.0=py36_0
+sra-tools=2.8.1=0
+trimmomatic=0.36=3
+

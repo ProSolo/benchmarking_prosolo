@@ -1,0 +1,223 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+Using sccaller installed via bioconda, available in your path as `sccaller`.
+
+samtools and bcftools also need to be installed.
+
+Configuration should be provided in YAML format (e.g. config.yaml)
+and loaded in the Snakefile.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+# get chromosome file if defined in config.json, set to undefined otherwise
+# the file should contain the name of one chromosome per line
+chrfile = config["references"].get("chromosomes","undefined")
+if chrfile == "undefined":
+    chrlist = ['chrM', 'chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+               'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+               'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+               'chr22', 'chrX', 'chrY']
+else:
+    chrlist = open(chrfile).read().splitlines()
+#
+# provide GATKBundle-2.8 default for dbsnp
+dbsnp = gatk_bundle_path + config["GATKBundle"].setdefault("dbsnp",
+                                                        "dbsnp_138.hg19.vcf")
+
+rule mpileup_for_sccaller_per_chr:
+    input:
+        ref = _get_ref,
+        bam = "mapping/{reference}/samples/{single_cell}.bps.sorted.bam",
+        bai = "mapping/{reference}/samples/{single_cell}.bps.sorted.bam.bai"
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr,chr(?:\d{1,2}|[XYM])}.sccaller.mpileup"
+    log:
+        "log/variant_calling/{reference}/sccaller/{single_cell}.{chr}.sccaller.mpileup.log"
+    shell:
+        'samtools mpileup '
+        ' -C 50 ' # adjusting mapping quality as recommended by sccaller README.md
+        ' -r {wildcards.chr} '
+        ' -O ' # output base positions on reads
+        ' -s ' # output mapping quality
+        ' -f {input.ref} '
+        ' -o {output} '
+        ' {input.bam} '
+        ' 2>&1 | tee {log} '
+
+
+def _test_bulk():
+    n = len(config["batches"]["bulk"])
+    if n == 1 :
+        return "bulk"
+    elif n == 0:
+        return "no bulk sample specified in config.yaml ( `config[\"batches\"][\"bulk\"]` ), needed for sccaller"
+    elif n > 1:
+        return "more than one bulk sample specified in config.yaml ( `config[\"batches\"][\"bulk\"]` ), exactly 1 needed for sccaller"
+
+
+rule gatk_hets_only_for_sccaller:
+    """
+    Filter down GATK bulk calls to heterozygous candidate sites for SCcaller.
+    """
+    input: tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{bulk}.{chr}.gatk.vcf"
+    output: tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{bulk,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk_hets.vcf"
+    log: "log/variant_calling/{reference}/sccaller/{bulk}.{chr}.gatk_hets.log"
+    shell:
+        "bcftools view --types snps --genotype het -O v {input} | "
+        "bcftools annotate -x FORMAT/PGT,FORMAT/PID -O v | "
+        "grep -P -v \"\t\./\.:0,0:\.:\.:\.\" >{output} " #GATK 3.6 sometimes creates corrupt FORMAT fields 
+        "2>&1 | tee {log} "
+
+
+
+rule sccaller_obtain_known_hets_per_chr:
+    input:
+        mp = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.sccaller.mpileup",
+        hets =
+            lambda wildcards: expand(tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{bulk}.{chr}.gatk_hets.vcf",
+                                reference = wildcards.reference,
+                                bulk = _test_bulk(),
+                                chr = wildcards.chr)
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.sccaller.hsnp.bed"
+    log:
+        "log/variant_calling/{reference}/sccaller/{single_cell}.{chr}.sccaller.hsnp.log"
+    conda: "envs/Benchmarking_ProSolo_py27.yaml"
+    params: out_prefix = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{single_cell}.{chr}.sccaller"
+    shell:
+        'sccaller -a hsnp '
+        ' -i {input.mp} '
+        ' --snpin {input.hets} '
+        ' --snp control '
+        ' -o {params.out_prefix} '
+        ' 2>&1 | tee {log} '
+
+
+rule sccaller_obtain_dbsnp_hets_per_chr:
+    input:
+        mp = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.sccaller.mpileup",
+        db = dbsnp
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.dbsnp.sccaller.hsnp.bed"
+    log:
+        "log/variant_calling/{reference}/sccaller/{single_cell}.{chr}.dbsnp.sccaller.hsnp.log"
+    conda: "envs/Benchmarking_ProSolo_py27.yaml"
+    params: out_prefix = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{single_cell}.{chr}.dbsnp.sccaller"
+    shell:
+        'sccaller -a hsnp '
+        ' -i {input.mp} '
+        ' --snpin {input.db} '
+        ' --snp dbsnp '
+        ' -o {params.out_prefix} '
+        ' 2>&1 | tee {log} '
+
+
+rule sccaller_call_potential_snvs_per_chr:
+    input:
+        mp = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.sccaller.mpileup",
+        hsnp = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{dbsnp}sccaller.hsnp.bed"
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.{dbsnp,(?:dbsnp\.)?}sccaller.varcall.bed"
+    log:
+        "log/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{dbsnp}sccaller.varcall.log"
+    conda: "envs/Benchmarking_ProSolo_py27.yaml"
+    params: out_prefix = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{dbsnp}sccaller"
+    shell:
+        'sccaller -a varcall '
+        ' -i {input.mp} '
+        ' --gss {input.hsnp} '
+        ' -o {params.out_prefix} '
+        ' 2>&1 | tee {log} '
+
+
+rule sccaller_call_potential_snvs_per_chr_low_cov:
+    input:
+        mp = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.sccaller.mpileup",
+        hsnp = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{dbsnp}sccaller.hsnp.bed"
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.{dbsnp,(?:dbsnp\.)?}low-cov.sccaller.varcall.bed"
+    log:
+        "log/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{dbsnp}low-cov.sccaller.varcall.log"
+    conda: "envs/Benchmarking_ProSolo_py27.yaml"
+    params: out_prefix = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{dbsnp}low-cov.sccaller"
+    shell:
+        'sccaller -a varcall '
+        ' -i {input.mp} '
+        ' --gss {input.hsnp} '
+        ' --min 4 '
+        ' --minvar 1 '
+        ' --RD 10 '
+        ' -o {params.out_prefix} '
+        ' 2>&1 | tee {log} '
+
+
+rule sccaller_merge_chrs_add_cutoffs:
+    input:
+        varcalls = lambda wildcards: expand(
+                tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sccaller/{single_cell}.{chr}.{modes}sccaller.varcall.bed",
+                reference = wildcards.reference,
+                single_cell = wildcards.single_cell,
+                chr = chrlist,
+                modes = wildcards.modes)
+    output:
+        "variant_calling/{reference}/sccaller/{single_cell,[^.]+}.{modes,(?:dbsnp\.)?(?:low-cov\.)?}sccaller.varcall.cutoff.bed"
+    log:
+        "log/variant_calling/{reference}/sccaller/{single_cell}.{modes}sccaller.varcall.cutoff.log"
+    conda: "envs/Benchmarking_ProSolo_py27.yaml"
+    shell:
+        'cat {input.varcalls} >{output} | '
+        ' 2>&1 | tee {log}; '
+        'sccaller -a cutoff '
+        ' -i {output} '
+        ' 2>&1 | tee -a {log} '
+
+
+rule sccaller_filter_amp_error:
+    input:
+        "variant_calling/{reference}/sccaller/{single_cell}.{modes}sccaller.varcall.cutoff.bed"
+    output:
+        "variant_calling/{reference}/sccaller/{single_cell}.{modes,(?:dbsnp\.)?(?:low-cov\.)?}sccaller.varcall.cutoff.fil-amp-err_alpha_{alpha}.bed"
+    log:
+        "log/variant_calling/{reference}/{single_cell,[^.]+}.{modes}sccaller.varcall.cutoff.fil-amp-err_alpha_{alpha}.log"
+    params: alpha = lambda wildcards: wildcards.alpha.replace('-','.')
+    shell: # The weird multiplication and division is needed due to numerical issues in awk's number representation that seem to kick in for some numbers below 1.0e-300 (solution adapted from: https://unix.stackexchange.com/a/141631)
+        'if [ {wildcards.alpha} == "1-0" ]; '
+        'then '
+        '  cp {input} {output} 2>&1 | tee {log}; '
+        'else '
+        '  ETA=` grep --only-matching -P "alpha={params.alpha},eta=[0-9]\.[-e0-9]+(;|$)" {input} | '
+        '        sed -e \'s/alpha={params.alpha},eta=//\' -e \'s/;//\' `; '
+        '  echo "extracted ETA for alpha={params.alpha}: $ETA" | tee {log}; '
+        '  awk \'{{ s=int($12*1.0e+300+0.5); if ( (s/1.0e+300)!=0) {{ print $0 }} }}\' {input} | '
+        '    awk -v cutoff="$ETA" \'$11/$12<cutoff && $7/($6+$7)>1/8 && $8=="PASS"\' '
+        '    > {output} '
+        '    2>&1 | tee -a {log}; '
+        'fi '
+
+rule sccaller_true_false_pos_neg_calculations:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls = "variant_calling/{reference}/sccaller/{sc}.{modes}sccaller.varcall.cutoff.fil-amp-err_alpha_{alpha}.bed"
+    output:
+        "variant_calling/{reference,[^/]+}/sccaller/{sc,[^.]+}.{modes,(?:dbsnp\.)?(?:low-cov\.)?}sccaller.varcall.cutoff.fil-amp-err_alpha_{alpha}.positives_negatives.tsv"
+    log:
+        "log/variant_calling/{reference}/sccaller/{sc}.{modes}sccaller.varcall.cutoff.fil-amp-err_alpha_{alpha}.positives_negatives.log"
+    resources:
+        mem_gb = 15
+    shell:
+        "Rscript --vanilla " + include_prefix + "scripts/sccaller.P-N_stats.alt-calling.R "
+        " --gt {input.ground_truth} "
+        " --calls {input.calls} "
+        " --out {output} "
+        " 2>&1 | tee {log} "
+ 

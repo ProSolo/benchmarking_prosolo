@@ -1,0 +1,27 @@
+"""
+This file aggregates all rules for mapping fastq files onto a
+reference, generating bam (and in the future cram) files, which
+are specified in the folder "mapping". If you add a file to that
+folder, you should also add the corresponding include statement here.
+
+Configuration of the processes to run in this stage should be provided
+in YAML format and specified in the Snakefile. For a commented example,
+see config.yaml in the directory pipelines, in particular:
+
+stages:
+    mapping: ''
+
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+include: "mapping/bwa_mem.rules"
+
+rule mapping_out:
+    input:
+        expand("mapping/{{reference}}/runs/{{prefix}}{map_steps}.bam",
+                map_steps=config["stages"]["mapping"])
+    output: "mapping/{reference}/runs/{prefix}.map.bam"
+    shell: "ln -s ../../../{input} {output} && touch -h {output}"
+

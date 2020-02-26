@@ -1,0 +1,78 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+GATK HaplotypeCaller using GATK 3.6, available in your
+$PATH as "gatk".
+
+Configuration should be provided in YAML format (e.g. config.yaml)
+and loaded in the Snakefile.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+# tmp folder definition for the local system, will default to "/local/tmp"
+tmp = config["folders"].get("tmp", "/local/tmp")
+
+# get or set empty settings in config and config.settings
+config.setdefault("settings", {})
+config["settings"].setdefault("gatk", {})
+
+# get or provide gatk defaults
+config["settings"]["gatk"].setdefault("heterozygosity", "0.001")
+config["settings"]["gatk"].setdefault("indel_heterozygosity",
+                                                     "1.25E-4")
+
+# provide GATK Bundle defaults
+config.setdefault("GATKBundle", {})
+config["GATKBundle"].setdefault("2.8", {})
+gatk_bundle_path = config["GATKBundle"]["2.8"].setdefault("folder",
+                                "/net/refdata/HomoSapiens/hg19_GATKBundle-2.8")
+# provide GATKBundle-2.8 default for dbsnp
+dbsnp = gatk_bundle_path + config["GATKBundle"].setdefault("dbsnp",
+                                                        "dbsnp_138.hg19.vcf")
+
+rule gatk_haplotype_caller_per_sample_per_chr:
+    input:
+        dbsnp,
+        ref = _get_ref,
+        bam = "mapping/{reference}/samples/{sample}.bps.sorted.bam",
+        bai = "mapping/{reference}/samples/{sample}.bps.sorted.bam.bai"
+    output:
+        gvcf = tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
+        idx = tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx"
+    params:
+        custom = config["settings"]["gatk"].setdefault("params", "") +
+                 config["settings"]["gatk"].setdefault("HaplotypeCaller", "") +
+                 " --bamOutput " + tmp + "/variant_calling/{reference}/{sample}.{chr}.g.bam " if
+                 config["settings"]["gatk"].setdefault("bamOutput", "False") == "True" else " "
+    log:
+        "log/variant_calling/{reference}/{sample}.{chr}.gatk_HaplotypeCaller.log"
+    threads: 2  # haplotype caller currently does not reliably use more than 2 threads
+    resources: mem_gb=2
+    shell:
+        "mkdir -p variant_calling/{wildcards.reference}; "
+        "gatk -T HaplotypeCaller "
+        "-I {input.bam} "
+        "--intervals {wildcards.chr} "
+        "-R {input.ref} "
+        "--out {output.gvcf} "
+        "--dbsnp {dbsnp} "
+        "--emitRefConfidence GVCF "
+        "--variant_index_type LINEAR "
+        "--heterozygosity {config[settings][gatk][heterozygosity]} "
+        "--indel_heterozygosity {config[settings][gatk][indel_heterozygosity]} "
+        "--variant_index_parameter 128000 "
+#       "-nct {threads} " # it makes sense to make snakemake reserve two threads (above) but keep
+#       HaplotypeCaller from allocating this number because it will use two as a minimum anyways
+#       and more than two if you theoretically give it two nct threads
+        "{params.custom} "
+        "2>&1 | tee {log}; "
+        "touch {output.idx} " # attempt to make the timepoint of idx later than g.vcf, because following GATK tools complain about older index...
+

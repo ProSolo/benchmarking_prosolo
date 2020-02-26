@@ -1,0 +1,217 @@
+# name of the current project, e.g. used for filenames
+# in pipeline stages that are run on all project samples at once
+project_name: Benchmarking_ProSolo_Dong2017
+data_set: Dong2017
+# steps to be taken in pipeline stages, specified by file name infixes,
+# comment out the lines of stages you don't need, adjust others to your needs
+stages:
+  preprocessing: .cutadaptIllumina.trimmomaticQual
+  mapping: .bwamem
+  bam_proc_per_run: .MarkDup
+  bam_proc_per_sample: ''
+folders:
+  # The folder where your data can be found, it should be an absolute path.
+  data: /path/to/Dong2017/data
+  # The tmp folder should be set for your SERVER ENVIRONMENT
+  tmp: /net/scratch/nobackup/dlaehnemann/tmp
+### REFERENCE DATASETS
+references:
+  # Where to find the reference genome in your SERVER ENVIRONMENT
+  hg19: /path/to/refdata/HomoSapiens/hg19_CanonicalChr/genome_bwa-0.7.9a/hg19.fa
+  ground_truth: variant_calling/hg19/IL-1c.bulk.ground_truth.tsv.gz
+  ground_truth_minGQ_30: variant_calling/hg19/IL-1c.bulk.ground_truth.minGQ_30.tsv.gz
+  ground_truth_bcf: ''
+  shapeit_folder: /path/to/refdata/HomoSapiens/hg19_shapeit/1000GP_Phase3
+  # Where to find the set of human chromosomes you look at in your SERVER ENVIRONMENT, only
+  # uncomment and adjust if you want to go beyond the canonical chromosomes
+#  chromosomes: /vol/cluster-data/dlaehnem/refdata/HomoSapiens/hg19_CanonicalChromosomes
+# GATK Bundle files needed for various GATK tools, mostly HaplotypeCaller, this should be set for
+# your SERVER ENVIRONMENT (may be deleted if GATK is not used or not used on human data)
+GATKBundle:
+  # from 2013, 2.8 is still the standard GATK Bundle -- a new one is in the
+  # GATK repository at: ftp://ftp.broadinstitute.org/bundle/hg38/hg38bundle/ (TODO)
+  '2.8': # quotes are needed, so this is parsed as a string key
+    # folder containing the current GATKBundle
+    folder: /path/to/refdata/HomoSapiens/hg19_GATKBundle-2.8/
+    dbsnp: dbsnp_138.hg19.vcf
+    g1k: 1000G_phase1.snps.high_confidence.hg19.vcf
+    hapmap: hapmap_3.3.hg19.vcf
+    mills: Mills_and_1000G_gold_standard.indels.hg19.vcf
+    omni: 1000G_omni2.5.hg19.vcf
+### OVERRIDING OR AMENDING RULE DEFAULTS
+# * 'misc' or 'params' and only string for a tool will AMEND rule defaults
+# * other keys will usually override defaults, thus only uncomment and edit them, if
+#   the rule defaults don't work for your current dataset
+settings:
+  bwa_mem: ''
+  # Where to find the files annotating your target capture sites, this needs to reflect your
+  # SERVER ENVIRONMENT
+  # These are needed for cutadapt (as these parameters should be tailored to
+  # each project, they should be specified in the config file, but good
+  # defaults are provided below)
+  capture: ''
+  cutadapt:
+    # how many times to look for left-overs of adapter sequence
+#    times: ' --times=2 '
+    # how many bases of overlap are needed for trimming
+#    overlap: ' --overlap=6 '
+    # remove all reads with a minimum length lower than n in:
+    # --minimum-length=n
+    # if another round of trimming, e.g. with trimmomatic, is performed, leave
+    # that filtering to the second tool
+#    minlen: ' '
+    # cut a fixed amount of bases from front/end of each read with:
+    # -u x   -u -y    -U x   -U -y
+    # (x bases off of front, y bases off of end of read, u is 1st read, U is 2nd read)
+    ## the following is needed only for PAG10 but done to all for consistency
+    crop: ' -u -1 -U -1 '
+    # other command line options to be passed to cutadapt
+    misc: ' '
+    ## the following adapter additions are needed for PNG
+    adapters:
+      # additional adapters to look for in the first read (on top of standard Illumina)
+      first: ' ' #' -a TAGATC$ 
+                 #-g ^GATCGGAAGAGCACACGTCT '
+             # 1st: Illumina leftovers, anchored at read end
+             # 2nd: Illumina Read2 primer site leftovers, anchored at read start
+      # additional adapters to look for in the second read (on top of standard Illumina)
+      second: ' ' #' -A TAGATC$ '
+              # 1st: Illumina leftovers, anchored at read end
+  # These are needed for trimmomatic (as these parameters should be tailored to
+  # each project, they should be specified in the config file, but good
+  # defaults are provided below)
+  trimmomatic:
+    # where to find Illumina adapters and how to cut them -- but cutadapt is better at
+    # cutting adapters, thus rather use the rules not cutting adapters -- otherwise,
+    # use TruSeq3-PE-2.fa for all Illumina data (including single end), as
+    # it contains reverse complements of adapters, which helps remove remains
+    # of adapter dimer contamination, adjust to your ENVIRONMENT
+#    Illumina: ' ILLUMINACLIP:/net/programs/Debian-7-x86_64/Trimmomatic-0.33/adapters/TruSeq3-PE-2.fa:2:30:5:4:true '
+    # use "HEADCROP:n" to cut off n bases off the start of the read and use
+    # "CROP:n" to trim the read to a length of n, cutting bases off the end
+#    crop: ' HEADCROP:2 CROP:95 '
+    # remove all reads with a minimum length lower than this value
+    minlen: ' MINLEN:20 '
+    # parameters for the quality trimming
+    # * standard settings were impossible, almost no data remained (MBs per read file_
+    # * SLIDINGWINDOW:4:24 LEADING:18 TRAILING:18 reduced data by more than a third, for IL-12 almost only singletons remained
+    quality: ' SLIDINGWINDOW:4:18 LEADING:10 TRAILING:10 '
+  gatk:
+    GenotypeGVCFs: ' --max_alternate_alleles 8 '
+#    HaplotypeCaller: ' '
+#    bamOutput: 'True'
+    heterozygosity: '0.001'
+    indel_heterozygosity: '1.25E-4'
+    params: ' '
+# sequencing read filenames infixes
+infix:
+  # filename infix for paired end sequencing read files
+  pair:
+  - '.1'
+  - '.2'
+  # filename infix for single end sequencing read files
+  single:
+  - '.0'
+### SETUP OF RUNS, SAMPLES AND SAMPLE SETS (BATCHES), INCLUDING ANNOTATION
+# a list of sequencing runs and an indication whether the data is paired or
+# single end data
+runs:
+  Clone-1: pair
+  Clone-2: pair
+  Clone-3: pair
+  Hunamp: pair
+  IL-11: pair
+  IL-12: pair
+  IL-1c: pair
+# DNA samples that were sequenced. The same material can be sequenced across
+# several runs, that are specified here
+samples:
+  Clones:
+  - Clone-1
+  - Clone-2
+  - Clone-3
+  Hunamp:
+  - Hunamp
+  IL-11:
+  - IL-11
+  IL-12:
+  - IL-12
+  IL-1c:
+  - IL-1c
+# define batches (sets of samples), if you want to do something per batch (e.g. variant calling)
+batches:
+  all_bulks:
+  - IL-1c
+  - Clones
+  - Hunamp
+  germline_bulk:
+  - Hunamp
+  somatic_bulk:
+  - IL-1c
+  bulk:
+  - Clones
+  single_cells:
+  - IL-11
+  - IL-12
+# annotations for the samples, e.g. about DNA material preparation
+# the 'platform' is e.g. necessary for bwa mapping
+sample_annotations:
+  Benchmarking_ProSolo_Dong2017:
+    library_prep: WGS
+  Clones:
+    amplification: none
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: HiSeq X Ten
+    platform: ILLUMINA
+  Clone-1:
+    amplification: none
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: HiSeq X Ten
+    platform: ILLUMINA
+  Clone-2:
+    amplification: none
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: HiSeq X Ten
+    platform: ILLUMINA
+  Clone-3:
+    amplification: none
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: HiSeq X Ten
+    platform: ILLUMINA
+  Hunamp:
+    amplification: none
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: Illumina HiSeq 2500
+    platform: ILLUMINA
+  IL-11:
+    amplification: normal_MDA
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: Illumina HiSeq 2500
+    platform: ILLUMINA
+  IL-12:
+    amplification: normal_MDA
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: Illumina HiSeq 2500
+    platform: ILLUMINA
+  IL-1c:
+    amplification: none
+    library_selection: WGS
+    library_prep: WGS
+    library_source: GENOMIC
+    machine: Illumina HiSeq 2500
+    platform: ILLUMINA
+

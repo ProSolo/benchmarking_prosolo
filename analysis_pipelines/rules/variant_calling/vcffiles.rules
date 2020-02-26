@@ -1,0 +1,61 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+Rules for modifying or querying VCF or BCF files.
+Requires bcftools and htslib (tabix and bgzip) in your path.
+
+Configuration should be provided in YAML format (e.g. config.yaml)
+and loaded in the Snakefile.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+
+# tmp folder definition for the local system, will default to "/net/scratch"
+tmp = config["folders"].get("tmp", "/local/tmp")
+
+# get chromosome file if defined in config.json, set to undefined otherwise
+# the file should contain the name of one chromosome per line
+chrfile = config["references"].get("chromosomes","undefined")
+if chrfile == "undefined":
+    chrlist = ['chrM', 'chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+               'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+               'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+               'chr22', 'chrX', 'chrY']
+else:
+    chrlist = open(chrfile).read().splitlines()
+
+
+#rule bgzip_vcf:
+#    input:
+#        "{prefix}.vcf"
+#    output:
+#        "{prefix}.vcf.gz"
+#    shell:
+#        "bgzip {input}"
+
+
+rule bcftools_index:
+    input:
+        "{prefix}.{filetype}"
+    output:
+        "{prefix}.{filetype,(vcf.gz|bcf)}.csi"
+    shell:
+        """
+        bcftools index {input}
+        """
+
+
+#rule bcftools_vcf2bcf:
+#    input:
+#        "{prefix}.vcf.gz"
+#    output:
+#        "{prefix}.bcf"
+#    shell:
+#        """
+#        bcftools view -O b {input} >{output} 
+#        """
+
+

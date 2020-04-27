@@ -1,0 +1,1084 @@
+\documentclass[authoryear,preprint,11pt]{scrartcl}
+\addtokomafont{disposition}{\rmfamily}
+\usepackage{graphicx}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{url}
+\usepackage{epsfig}
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+
+\usepackage{natbib}
+
+%\usepackage[left]{lineno}
+%\linenumbers
+
+\usepackage{setspace}
+\doublespacing
+
+\usepackage{rotating}
+\usepackage{xtab}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow} % enable table cells spanning multiple rows (\multirow{}{}{})
+\usepackage{bigdelim} % enable brackets in tables that span multiple rows (e.g.: `\multirow{}{}{\ldelim}`)
+\usepackage{colortbl} % enable background coloring of table rows (\rowcolor{})
+\usepackage{tikz}
+
+\usepackage{listings} % enable source code listings, e.g.~\begin{lstlisting}
+\usepackage[inline]{enumitem} % enable enumerate* environment for inline enumeration
+
+\usepackage{hyperref}
+\usepackage{tocstyle}
+% Define Supplement prefix for numbered references
+\newcommand{\supplpref}{S~}
+% Set Supplement prefix for numbered references
+\renewcommand{\thetable}{\supplpref\arabic{table}}
+\renewcommand{\thesection}{\supplpref\arabic{section}}
+\renewcommand{\thesubsection}{\supplpref\arabic{section}.\arabic{subsection}}
+\renewcommand{\thesubsubsection}{\supplpref\arabic{section}.\arabic{subsection}.\arabic{subsubsection}}
+\renewcommand{\thefigure}{\supplpref\arabic{figure}}
+\renewcommand{\theequation}{\supplpref\arabic{equation}}
+
+\newcommand{\Prob}{{P}}
+
+\newcommand{\cR}{{\mathfrak R}}
+\newcommand{\cB}{{\mathfrak B}}
+
+\usepackage{xr-hyper}
+
+% xr helper code to generate dependency definition command \myexternaldocument
+\makeatletter
+\newcommand*{\addFileDependency}[1]{% argument=file name and extension
+  \typeout{(#1)}
+  \@addtofilelist{#1}
+  \IfFileExists{#1}{}{\typeout{No file #1.}}
+}
+\makeatother
+
+\newcommand*{\myexternaldocument}[1]{%
+    \externaldocument{#1}%
+    \addFileDependency{#1.tex}%
+    \addFileDependency{#1.aux}%
+}
+
+\myexternaldocument{main}
+
+\begin{document}
+
+\title{ProSolo: Accurate Variant Calling from Single Cell DNA Sequencing Data}
+\subtitle{Supplementary Methods and Results}
+
+\author{David Lähnemann, Johannes Köster, Ute Fischer, \\ Arndt Borkhardt, Alice McHardy, Alexander Schönhuth}
+
+\maketitle
+
+\tableofcontents
+
+\section{Probabilistic model of ProSolo}
+
+\subsection{Underlying True Alternative Nucleotide Frequencies: $\theta$}
+\label{sec.afs}
+
+The eventual goal in variant calling is to infer the true frequency of a possible alternative, and thus variant, nucleotide in the sample you sequenced.
+For such an alternative nucleotide $x\in\{A,C,G,T\}$ at a particular site in a genome, we therefor define\footnote{We omit an explicit notation for a site, but every $\theta$ is always specific to one genome position.}:
+\begin{equation}
+ \theta_{b}(x), \theta_{s}(x)
+\end{equation}
+as the (true, but usually unknown) frequency of alternative nucleotide $x$ in the bulk and single cell sample, respectively.
+These frequencies translate into probabilities of sampling a DNA fragment containing the respective nucleotide at a site:
+either directly, as with the sequencing of DNA from a bulk of cells $b$;
+or indirectly, as with the sequencing of whole genome amplified DNA of a single cell $s$.
+It is our eventual goal to work back from bulk and single cell data to derive likelihoods for possible values of $\theta_{b}(x)$ and $\theta_{s}(x)$, respectively, allowing us to place likelihoods on possible underlying genotypes and events like allele dropouts in single cells.\\
+
+For a single diploid cell $s$, the possible alternative nucleotide frequencies are
+\begin{equation}
+ \theta_s(x) =
+ \begin{cases}
+  0       \\
+  \frac12 \\
+  1
+ \end{cases}
+\end{equation}
+reflecting the cases that:
+(i) $x$ is not present at the position---if no other allele is present, this constitutes a homozygous reference site;
+(ii) $x$ reflects an alternative nucleotide that is present in only one of the two genome copies of the single cell---this constitutes a heterozgyous site;
+(iii) $x$ is an alternative nucleotide present in both genome copies of the single cell---this constitutes a homozygous alternative site.
+
+Bulk experiments contain subpopulations that can differ in their genotype regarding a particular site, through a somatic mutation that one of the subpopulations has acquired in one allele.
+They can thus exhibit any alternative nucleotide frequency ($\theta_{b}(x) \in [0,1]$), depending on the genotypes present and their relative abundance (Figure~\ref{fig:event-space}).
+
+\subsection{Non-reference Nucleotide Frequencies After Biased Whole Genome Amplification: $\rho$}
+\label{sec.abundance}
+
+Let further $\rho_{s}(x),\rho_{b}(x)$ be the abundance of genome copies showing alternative nucleotide $x$ at a particular site in the single or bulk DNA sample, respectively, right before the sequencing---for the single cell, this means after the whole genome amplification that is necessary to obtain enough DNA for sequencing with technologies like Illumina.
+These abundances translate into probabilities to draw a read containing $x$ from the respective sample (in the sequencing experiment), given that such a read covers the genome position.
+
+Under the assumption of uniform abundance of all parts of the genome and uniform abundance of each haplotype, which is reasonable in bulk sequencing (i.e.~without amplification), it holds that $\rho = \theta$, so we henceforth assume that
+\begin{equation}
+ \label{eq:rho-b}
+ \rho_{b}(x) = \theta_{b}(x).
+\end{equation}
+
+In contrast, in single cell sequencing---due to the necessary whole genome amplification process---the assumption of uniform abundance of all parts of the genome and of each haplotype does not hold.
+Instead, each allele at a particular site can be amplified to a different degree, ranging from no amplification at all (i.e.~a complete allele dropout) to several hundred or thousand copies.
+Thus
+
+\begin{equation}
+ \label{eq.nonUniDependency}
+ \rho_s(x) \ne \theta_s(x)\quad\text{but instead}\quad \rho_s(x) \sim \Prob(\rho_s \mid \theta_s(x))
+\end{equation}
+
+that is, $\rho_s$ is a random variable governed by a probability distribution ${\Prob(\rho_s \mid \theta_s(x) )}$ that depends on the original alternative nucleotide frequency $\theta_s$.
+$\Prob(\rho_s \mid \theta_s(x))$ reflects the differential amplification of the two alleles, which is only detectable for heterozygous sites ($\theta_s = \frac12$), thus
+
+\begin{equation}
+ \label{eq.rho-given-theta}
+ \Prob(\rho_s \mid \theta_s(x) ) =
+ \begin{cases}
+  \Prob(\rho_s \mid \theta_s(x) = 0)        \\
+  \Prob(\rho_s \mid \theta_s(x) = \frac12 ) \\
+  \Prob(\rho_s \mid \theta_s(x) = 1 )
+ \end{cases}
+\end{equation}
+
+Understanding these probability densities is key to understanding the statistical issues single cell whole genome amplification methods come along with\footnote{
+ Note, in addition to the whole genome amplification bias, these distributions can implicitly also model the amplification errors that the polymerases used for whole genome amplification introduce in the copy process.
+}.
+From the Supplementary Material of \cite{lodato_somatic_2015} (see Figure S5 and the section ``Modeling MDA-derived alternative read counts'' of the respective supplement for the details), we get an empirical model that characterizes them for the whole genome amplification method multiple displacement amplification (MDA)\footnote{
+ For other whole genome amplification methods with different amplification bias properties, we can simply implement a different instance of the general model for $\Prob(\rho_s \mid \theta_s(x))$ accordingly.
+ And for MDA, different empirical models learned from other or more published datasets could be implemented as well as strategies of inferring parameters from the very dataset analysed in a certain run of the software.
+}:
+
+\begin{equation}
+ \begin{split}
+  \Prob(\rho_s \mid \theta_s = 0 ) 			&= \cB\cB_{l,\alpha, \beta}(\rho_s)\\
+  \Prob(\rho_s \mid \theta_s = \frac12) &= w(l) \times \cB\cB_{l,\alpha_1,\alpha_1}(\rho_s) + (1-w(l)) \times \cB\cB_{l,\alpha_2,\alpha_2}(\rho_s)\\
+  \Prob(\rho_s \mid \theta_s = 1 ) 			&= \cB\cB_{l,\beta,\alpha}(\rho_s)
+ \end{split}
+\end{equation}
+
+where $\cB\cB$ represents beta-binomial functions with the parameters linearly scaled by $l$, the total observations at a site (i.e.~the total read coverage).
+For homozygous reference sites ($\theta_s = 0$), the parameters of the beta-binomial function are $\alpha(l)$ and $\beta(l)$.
+For the heterozygous sites ($\theta_s = \frac12$), both beta-binomial functions are symmetrical with $\alpha_1(l),\alpha_2(l)$ dependent on the site-specific coverage $l$ and combined by factor $w(l)$.
+$\rho_s \in \frac{k}{l}, k \in {0, 1, \dots, l}$ are the possible cases of alternative nucleotide frequencies.
+In their Supplementary Figure S5 in panels C and D, \cite{lodato_somatic_2015} give estimates of the parameters $\alpha(l), \beta(l), w(l), \alpha_1(l), \alpha_2(l)$ obtained by fitting to empirical data.
+We list the values we extracted in Table~\ref{tab:Lodato}.
+For the third case (homozygous alternative nucleotide, i.e.~$\Prob(\rho_s \mid \theta_s = 1)$) we mirror the homozygous reference function\footnote{
+Note that the amount of sites that are homozygous for the reference allele is much larger, which also means that statistics for $\theta_s=1.0$ are more robust when being derived from the case $\theta_s=0.0$.
+}.
+
+Using one of the possible expressions of the respective probabilities (Equation 6.28 in Section 6.2.4 of \cite{johnson_univariate_2005})\footnote{
+ Here, the parameters $b,w,c$ from the formulation in Equation 6.28 in Section 6.2.4 of \cite{johnson_univariate_2005} are summarised into $\alpha_1,\alpha_2$ from \cite{lodato_somatic_2015} with:
+ \begin{equation}
+ \label{eq.johnson_relation}
+ \begin{split}
+  \alpha_1 =~ & \frac{w_1}{c} = w_1 = b_1\\
+  \alpha_2 =~ & \frac{w_2}{c} = w_2 = b_2
+ \end{split}
+ \end{equation}
+ I.e., the number of starting reference and alternative alleles is identical within each beta-binomial, yielding symmetric distributions.
+ In terms of the Pólya urn model used as motivation in \cite{johnson_univariate_2005}, this equates to the number of $w$ white and $b$ black balls being identical.
+ $c$, the number of balls of identical color that are added whenever a ball of particular color is added, is set to $1$.
+ Further considerations for obtaining the values of $b,w$ are discussed below in relation to the Pólya urn model.
+}, with regards to the beta function $\mathfrak{B}$, we can compute the probability of observing $k$ reads with the alternative nucleotide at a site of coverage $l$ for the heterozygous case as follows:
+
+\begin{equation}
+ \label{eq.beta-binomial}
+ \begin{split}
+  \Prob(K = k \mid \theta_s = \frac{1}{2}) =~ &w(l) \times {l \choose k} \frac{ \mathfrak{B}_{k+\alpha_1,l-k+\alpha_1} }{ \mathfrak{B}_{\alpha_1,\alpha_1} } +\\
+  &(1-w(l)) \times {l \choose k} \frac{ \mathfrak{B}_{k+\alpha_2,l-k+\alpha_2} }{ \mathfrak{B}_{\alpha_2,\alpha_2} }\\
+ \end{split}
+\end{equation}
+
+In the future, these distributions could be learned from the dataset at hand, whenever large enough sets of sites that have a high probability of being homozygous reference or heterozygous are available.
+In addition, the exact distribution used could be further refined with the below considerations regarding the suitability of beta-binomial distributions in this case.\\
+
+\begin{table}[tbp]
+ \caption{Parameters of the multiple displacement amplification (MDA) amplification bias model as presented in Supplementary Figure S5, panels C and D of \cite{lodato_somatic_2015}. Each of these scales linearly up to a site coverage of 60, with the slopes and intercepts as given here.}
+ \label{tab:Lodato}
+ \renewcommand{\arraystretch}{1.15}
+
+ \begin{center}
+  \begin{tabular}{lrr}
+   parameter  & slope        & intersect   \\
+   \toprule
+   $\alpha$   & -0.000027183 & 0.068567471 \\
+   $\beta$    & 0.007454388  & 2.367486659 \\
+   \midrule
+   $w$        & 0.000548761  & 0.540396786 \\
+   $\alpha_1$ & 0.057378844  & 0.669733191 \\
+   $\alpha_2$ & 0.003233912  & 0.399261625 \\
+   \bottomrule
+  \end{tabular}
+ \end{center}
+\end{table}
+
+\subsubsection{The Pólya urn model: motivating the use of beta-binomial distributions}\label{sec:polya-urn}
+
+For the heterozygous case, the applicability of the beta-binomial distribution \citep{irwin_distribution_1954} should be immediately evident from the formulation of the Pólya urn model \citep{eggenberger_uber_1923} that generates beta-binomial distributions \citep{irwin_distribution_1954,johnson_univariate_2005}.
+It works directly analogous to the amplification process\footnote{The notation used here is analogous to Equation 6.28 in Section 6.2.4 of \cite{johnson_univariate_2005}. Also see Equation \ref{eq.johnson_relation} in the above footnote for its relation to $\alpha_1, \alpha_2$ in \cite{lodato_somatic_2015}.}:
+
+At the start, the urn contains $w$ $w$hite and $b$ $b$lack balls, analogous to the two alleles present at a heterozygous site---let us say white balls represent the reference allele and black balls the alternative allele.
+Whenever a ball is drawn, it is replaced to the urn and another $c$ balls of the same $c$olor are added, analogous to the polymerase copying an allele.
+
+\begin{figure}[!tpb]
+ \begin{minipage}[t]{.47\linewidth}
+  \textbf{A}\\
+  \includegraphics[width=.95\linewidth]{figs/Beta_binom_cov-20_w-2_b-2_f-1.pdf} \\
+  \textbf{C}\\
+  \includegraphics[width=.95\linewidth]{figs/Beta_binom_cov-20_w-2_b-2_f-0-25.pdf} \\
+ \end{minipage}
+ \begin{minipage}[t]{.47\linewidth}
+  \textbf{B}\\
+  \includegraphics[width=.95\linewidth]{figs/Beta_binom_cov-20_w-2_b-2_f-0-5.pdf}
+  \textbf{D}\\
+  \includegraphics[width=.95\linewidth]{figs/Beta_binom_cov-20_w-4_b-5-9e-05_f-0-5.pdf}
+  \llap{\raisebox{4ex}{%  move next graphics to top right corner
+        \includegraphics[width=.7\linewidth]{figs/Beta_binom_cov-20_w-4_b-5-9e-05_f-0-5_focus_tail.pdf}
+        \hspace{1ex}
+    }}
+ \end{minipage}
+ \caption{
+  Beta-binomial distributions with different shape parameters, that correspond to our theoretical numbers of starting allele strands ($w_t = b_t = 2$) scaled to different amplification accessibility by $f$.
+  \textbf{A} Perfect accessibility of both strands of both alleles for amplification ($f = 1$) and the resulting alternative allele frequencies.
+  \textbf{B} Half that accessibility ($f = 0.5$), resulting in the uniform distribution.
+  \textbf{C} For any accessibility scaling value below $\frac{1}{2}$ (e.g.~$f = 0.25$), the beta-binomial distribution will give maxima at alternative allele frequencies $0$ and $1$.
+  \textbf{D} The heavily non-symmetrical case ($w_t \gg b_t$), analogous to homozgyous reference genotypes.
+  Instead of the distribution currently used in ProSolo, which was fit to data and compounds sequencing errors with amplification errors (Figure~\ref{fig:prosolo_alt-calling}A in the main manuscript), this distribution makes the following theoretical assumptions:
+  It sets $w_t = 4$ for the $4$ reference strands available for amplification and $b_t$ to four times the known $\Phi$29 error rate for drawing / introducing an error alternative allele instead of the reference allele.
+  The inset zooms into the y-axis to show details of the tail of the distribution.}
+ \label{fig:beta-binomials}
+\end{figure}
+
+As we have two strands each for both alleles, a natural choice of starting alleles would be $w_t = b_t = 2$.
+We here subscript the values with $_t$ to denote the theoretical nature of the parameter choice, as opposed to practical values of $w_p,b_p$ introduced below.
+And as one strand is added with every copy operation, we set $c = 1$ (Figure~\ref{fig:beta-binomials}A).
+This gives us a slight peak around the alternative allele frequency of $0.5$ (Figure~\ref{fig:beta-binomials}A), which we can also make out in the real data (Figure~\ref{fig:prosolo_alt-calling}B of the main manuscript).
+
+However, it does not capture the allele dropout peaks at the allele frequencies of $0$ and $1$ seen there.
+A likely reason for these dropout peaks is, that not every position on every allele is equally accessible to amplification initiation \citep{picher_trueprime_2016}.
+I.e.~mechanistically, some close-by site to the one under consideration must be single-stranded at some point during the continuous amplification reaction (at a constant temperature), to be accessible for an initial priming that will start the amplification of the respective allele for that region.
+To account for this lower initiation accessibility, we can introduce a scaling factor $f$ for the starting frequencies of the two alleles, with $0 <= f <= 1$, to scale down the initially available allele count:
+if strands are already separated for this allele and amplification initiation works perfectly for both strands ($f = 1$), then we would get $w_p = w_t * f = 2 * 1 = 2$;
+whereas at the other extreme of $f = 0$, amplification initialisation of the allele would be impossible.
+Then, for $f = \frac{1}{2}$, we get the uniform distribution ($w_p = w_t * f = \frac{1}{2} * 2 = 1$, Figure~\ref{fig:beta-binomials}B), and for all $f < \frac{1}{2}$, we will get distributions with peaks at $0$ and $1$ (e.g.~Figure~\ref{fig:beta-binomials}C).
+
+If we then consider a mixture of sites with different $f$, we would expect distributions as observed e.g.~in Figure~\ref{fig:prosolo_alt-calling}B of the main manuscript; and a reasonable approximation of this is the mixture of the two symmetrical beta-binomials as fitted by \cite{lodato_somatic_2015}, one with $f \approx 0.40 < \frac{1}{2}$ and one with $f \approx 0.67 > \frac{1}{2}$ (i.e.~the intersects of $\alpha_2$ and $\alpha_1$ plus their slight slope-adjustments, as given in Table~\ref{tab:Lodato}).
+
+\subsubsection{Outlook: more realistic beta-binomial distributions} \label{sec:better_beta-binom}
+
+However, something that this does not capture is possible asymmetry of the distributions, i.e.~the case of $w \neq b$.
+While the theoretical starting amounts of strands of both alleles in the heterozygous case should remain the same ($w_t = b_t = 2$), we would have to introduce allele-specific scaling factors $f_w \neq f_b$ that capture the different availability of the two alleles for amplification (e.g.~because one of the alleles is more densely wrapped around Histones than the other).
+As a result we would get $w_p = w_t * f_w \neq f_b * b_t = b_p$, and instead of the one shape parameter in the symmetrical case, we would then have to fit the distributions with a second shape parameter.
+I.e.~instead of Equation \ref{eq.johnson_relation}, we would get:
+\begin{equation}
+ \label{eq.assym_het_beta-binom}
+ \begin{split}
+  \alpha_1 =~ & w_p = w_t * f_w = 2 f_w\\
+  \beta_1 =~ & b_p = b_t * f_b = 2 f_b
+ \end{split}
+\end{equation}\\
+
+However, assuming that the dropout of both alleles---reference and alternative---is equally likely, this asymmetry will average out over all heterozygous sites, and the symmetry assumption remains a justified reduction in parameters to fit when fitting a mixture of two beta-binomials.
+
+This is somewhat different for the homozygous case.
+Here, \cite{lodato_somatic_2015} already modelled the allele frequency deviations ($>0$ for homozygous reference) as an asymmetric beta-binomial distribution.
+This gives a reasonable fit to the data and makes sense to use, as we would expect these deviations to be the result of amplified polymerase errors from the MDA.
+While we just use the distributions fit by \cite{lodato_somatic_2015} in our initial implementation we present here, this could in the future be replaced by a theoretically derived beta-binomial distribution.
+For example, for the homozygous reference case, a very low $b_t$ (the probability of ``choosing'' a previously non-existing error allele) could be determined by (four times) the known $\Phi$29 polymerase error rate, whereas $w_t$ would be set to $4$ to account for four reference strands available for copying (Figure~\ref{fig:beta-binomials}D).
+As $f$ would in this case affect both the reference ($w$) and the error allele ($b$) alike, it could be set to some identical value for both, e.g.~to an average accessibility of $0.5$ (Figure~\ref{fig:beta-binomials}D).
+This would avoid compounding the uncertainty due to MDA with sequencing errors, that we already account for separately in our latent variable model through base calling quality scores and is one very likely source of the current mis-classifications of ground truth heterozygous sites as homozygous (Figure~\ref{fig:gt-calling-gt-colouring}).\\
+
+
+\subsection{Reads: Sampling Alternative Nucleotide Frequencies in the Sequencing Process}
+\label{sec.reads}
+
+Let $\cR$ (=$\cR(g)$) denote all reads covering a site $g$, with $R_i\in\cR$ denoting an individual read out of the $l$ reads aligning to that site (${l\in{\mathbb N}, i \in \{1,2,\dots,l\}}$).
+Formally, we index positions in aligned reads by the respective genome indices $g$, but we omit the index $g$ for readability.
+Working with a given $\rho$, one can assume independence among the reads in the respective sample (while, of course, given $\theta$, one can assume independence only in bulk, due to the necessary amplification and the resulting coverage nonuniformity in single cell samples).
+That is
+
+\begin{equation}
+ \label{eq.independence}
+ L(\rho\mid\cR) \propto \Prob(\cR\mid\rho) = \prod_{R\in\cR}\Prob(R\mid\rho) \propto \prod_{R\in\cR}L(\rho\mid R)
+\end{equation}
+
+both for bulk and single cell sequencing. 
+Let $S_{R_i}[g]$ be the nucleotide determined by the sequencer for position $g$ of read $R_i$ and $Q_{R_i}[g]$ be the Phred quality score for the nucleotide at that position of read $R_i$\footnote{
+ As above, we now omit $g$ for $S_{R_i}$ and $Q_{R_i}$ for ease of notation and reading, as we will for $M_{R_i}$.
+ Also note that the value of $Q_{R_i}[g]$ can be adjusted by a base quality score recalibration that accounts for systematic base calling errors, before using it as input to ProSolo.
+}.
+Let further $M_{R_i}[g]$ be the Phred alignment quality score\footnote{
+ Also called mapping quality; represented by the MAPQ tag in the sequence alignment (SAM) format specifications v1 (2a802cd) and by the MQ tag in the variant call format (VCF) specification v4.3 (2a802cd).
+ As before, we will omit the position $g$ from notation from this point on.
+} provided by the aligner.
+We now define $Z_i[g]$ ($i\in\{1,\dots,l\}$) to be the collection of the observable variables for the alignment of one of $l$ reads $R_i \in \cR$ to a genome position $g$.
+Omitting index $g$, this is the vector ${Z_i = \langle S_{R_i}, Q_{R_i}, M_{R_i} \rangle}$ and drawing on this information, we now introduce hyperparameters analogously to the model for tumor-normal variant calling as outlined by \cite{koster_enhancing_2019} for Varlociraptor.
+These will be the latent variables $\omega_i\in\{0,1\}$ to model correct placement of an alignment ($\omega_i=1$ if correct and $\omega_i=0$ otherwise) and $\xi_i\in\{0,1\}$ to specify whether an alignment $Z_i$ is associated with the alternative nucleotide ($\xi_i=1$) or not ($\xi_i=0$).
+Taken together, they give three cases
+
+\begin{equation}
+ \label{eq.read-cases}
+ (\omega_i,\xi_i) =
+ \begin{cases}
+  (1,1): R_i \text{ mapped correctly, alternative nucleotide}  \\
+  (1,0): R_i \text{ mapped correctly, reference nucleotide} \\
+  (0,\{0,1\}): R_i \text{ not mapped correctly, nucleotide irrelevant}
+ \end{cases}
+\end{equation}\\
+
+We thus model the two major sources of uncertainty on the level of the individual alignment $Z_i$, 1) \emph{alignment uncertainty} and 2) \emph{typing uncertainty}, by associating every alignment $Z_i$ with these two binary-valued, latent variables, reflecting uncertainty hyperparameters, $\omega_i$ and $\xi_i$:\\
+
+\emph{First},
+\begin{equation}
+ \label{eq.map-prob}
+ \omega_i \sim \text{Bernoulli}\left(\pi_i \right) \text{ for }i=1,\dots,l
+\end{equation}
+
+where $\pi_i$ is the (Phred scaled) posterior probability proportional to $M_{R_i}$ provided by the aligner.
+We can compute it with
+
+\begin{equation}
+ \label{eq.MQ.phred}
+ \pi_i = 10^{-M_{R_i}/10} \\
+\end{equation}\\
+
+\emph{Second},
+\begin{equation}
+ \label{eq.var-prob}
+ \xi_i \sim \text{Bernoulli}\left(\rho \right) \text{ for }i=1,\dots,l
+\end{equation}
+which reflects that sampling a fragment from the locus that bears the alternative nucleotide agrees with the probability to sample a genome copy with the alternative nucleotide from the pool of amplified DNA. 
+
+Whether $\xi_i$ is $1$ or $0$ is generally not evident from the observed $Z_i$, due to typing uncertainty.
+We formally define\footnote{
+ If $\omega_i=0$, that is the alignment is incorrect, $Z_i \mid \omega_i = 0 \sim 1$ reflects that $Z_i$ has no influence on the posterior probability distribution of $\rho$.
+}
+\begin{equation}
+ \label{eq.abs-pres}
+ Z_i \mid \omega_i = 1, \xi_i = 0 \sim a(Z_i) \quad\text{ and }\quad
+ Z_i \mid \omega_i = 1, \xi_i = 1 \sim p(Z_i)
+\end{equation}
+
+where $a,p$ are probability distributions over correct $S_{R_i}$ when the alternative nucleotide is either \emph{a}bsent or \emph{p}resent in read $R_i$ and $a(\cdot)$ and $p(\cdot)$ are the respective functions to sample from this distribution for a particular read.
+With these probability distributions, we can account for any number of factors for which we know how they affect these probability distributions---but if we lack any further information for an alternative nucleotide, we can assume $Q_{R_i}$ to be a specification of these distributions for $R_i$, accounting for the uncertainties of the sequencing process.
+With ${x \in \{A,C,G,T\}}$ the alternative nucleotide under inspection, we can thus compute:
+
+\begin{align}
+ a(Z_i) & =
+ \label{eq:absent-phred}
+ \begin{cases}
+  10^{-Q_{R_i}/10}     & \text{ if } S_{R_i} = x    \\
+  1 - 10^{-Q_{R_i}/10} & \text{ if } S_{R_i} \neq x
+ \end{cases} \\
+ p(Z_i) & = 1 - a(R_i)
+ \label{eq:present-phred}
+\end{align}
+
+\subsection{Single cell latent variable model} \label{sec:sc-model}
+
+By applying the Chapman-Kolmogorov equation with our binary hyperparameters to the single cell case\footnote{
+ We will only be looking at single cell samples in the following, as the case of $\rho_b = \theta_b$ is the simpler one and analogous without the whole genome amplification considerations. Please also refer to the tumor and normal sample derivations in \cite{koster_enhancing_2019}, but note that we need no purity parameter, here.
+}, we get
+
+\begin{equation}
+ L(\rho_s \mid Z_i^s) \propto~ \Prob(Z_i^s \mid \rho_s)= \int_{\omega_i^s,\xi_i^s}\Prob(Z_i^s \mid \omega_i^s,\xi_i^s)\times \Prob(\omega_i^s,\xi_i^s \mid \rho_s)\;d(\omega_i^s,\xi_i^s)
+\end{equation}
+
+which fans out to the following cases from equation \ref{eq.read-cases}:
+
+\begin{equation}
+ \begin{split}
+  \Prob(Z_i^s \mid \rho_s) =~ &\Prob(Z_i^s \mid \omega_i^s=0) \times \Prob(\omega_i^s=0 \mid \rho_s) \\
+  &+ \Prob(Z_i^s \mid \omega_i^s=1,\xi_i^s=0) \times \Prob(\omega_i^s=1,\xi_i^s=0 \mid \rho_s) \\
+  &+ \Prob(Z_i^s \mid \omega_i^s=1,\xi_i^s=1) \times \Prob(\omega_i^s=1,\xi_i^s=1 \mid \rho_s) \\
+ \end{split}
+\end{equation}
+
+Knowing that the mapping probability of reads is independent from the given (distorted) allele frequency $\rho_s$, and assuming a sampling probability of 1 for any mismapped read, this becomes:
+
+\begin{equation}
+ \begin{split}
+  \Prob(Z_i^s \mid \rho_s) =~ &\Prob(\omega_i^s=0) \\
+  &+ \Prob(Z_i^s \mid \omega_i^s=1,\xi_i^s=0) \times \Prob(\omega_i^s=1) \times \Prob(\xi_i^s=0 \mid \rho_s) \\
+  &+ \Prob(Z_i^s \mid \omega_i^s=1,\xi_i^s=1) \times \Prob(\omega_i^s=1) \times \Prob(\xi_i^s=1 \mid \rho_s) \\
+ \end{split}
+\end{equation}
+
+With Equation~\ref{eq.map-prob} for $\omega_i^s$, Equation~\ref{eq.var-prob} for $\xi_i^s$ and Equations~\ref{eq:absent-phred} and \ref{eq:present-phred} for the conditional probabilities of the data given an absence or presence of the observed nucleotide, we get:
+
+\begin{equation}
+ \label{eq:read_probability}
+ \begin{split}
+  \Prob(Z_i^s \mid \rho_s) &= (1 - \pi_i^s) \\
+  &+~ a^s(Z_i^s)\times \pi_i^s \times (1 - \rho_s) \\
+  &+~ p^s(Z_i^s) \times \pi_i^s \times \rho_s \\
+ \end{split}
+\end{equation}
+
+As the $l$ reads are conditionally independent, given a particular (distorted) alternative nucleotide frequency $\rho_s$ (also see Equation \ref{eq.independence}), we can calculate the likelihood of such a particular $\rho_s$ with:
+
+\begin{equation}
+ \label{eq:read-product}
+ L(\rho_s \mid\boldsymbol{Z}^s) \propto \Prob(\boldsymbol{Z}^s \mid \rho_s) = \prod_{i=1}^l \Prob(Z_i^s \mid \rho_s)
+\end{equation}
+
+With the resulting likelihoods for $\rho_s \in [0,1]$, we can calculate the likelihood of a particular $\theta_s$:
+
+\begin{equation}
+ \label{eq:theta-likelihood}
+ L(\theta_s \mid\boldsymbol{Z}^s) \propto \Prob(\boldsymbol{Z}^s \mid \theta_s) = \sum_{k=0}^{l} \left\{ \Prob(\boldsymbol{Z}^s \mid \rho_s = \frac{k}{l}) \times \Prob(\rho_s = \frac{k}{l} \mid \theta_s) \right\}
+\end{equation}
+
+For $\theta_s \in \{0,\frac12,1\}$, with equation \ref{eq.rho-given-theta} specifying the cases of $\theta_s$ and Equation \ref{eq:BBLodato} further specifying $\Prob(\rho_s \mid \theta_s
+ )$ for MDA, this gives us:
+
+\begin{equation}
+ \label{eq:thetas-likelihood}
+ \begin{split}
+  \Prob(\boldsymbol{Z}^s \mid \theta_s = 0) &=  \sum_{k=0}^{l} \left\{ \Prob(\boldsymbol{Z}^s \mid \rho_s = \frac{k}{l}) \times \cB\cB_{l,\alpha, \beta} (\rho_s = \frac{k}{l}) \right\}\\
+  \Prob(\boldsymbol{Z}^s \mid \theta_s = \frac12) &= \sum_{k=0}^{l} \left\{ \Prob(\boldsymbol{Z}^s \mid \rho_s = \frac{k}{l}) \times \left[ w(l) \times \cB\cB_{l,\alpha_1,\alpha_1}(\rho_s = \frac{k}{l}) + \right.\right.\\
+   &\qquad \qquad \qquad \left.\left.(1-w(l)) \times \cB\cB_{l,\alpha_2,\alpha_2}(\rho_s = \frac{k}{l}) \right] \right\} \\
+  \Prob(\boldsymbol{Z}^s \mid \theta_s = 1) &=  \sum_{k=0}^{l} \left\{ \Prob(\boldsymbol{Z}^s \mid \rho_s = \frac{k}{l}) \times \cB\cB_{l,\beta, \alpha} (\rho_s = \frac{k}{l}) \right\}\\
+ \end{split}
+\end{equation}
+
+For the current implementation, we use the empirical values for $\alpha(l), \beta(l), w(l), \alpha_1(l), \alpha_2(l)$ as deduced by \cite{lodato_somatic_2015} (Table~\ref{tab:Lodato}).
+But as mentioned above, these could be learned from a dataset at hand whenever high-confidence sets of heterozygous and homozygous sites are available (e.g.~by calling variants on a background bulk and cross-referencing with dbSNP).\\
+
+\subsection{Bulk background: Accounting for Amplification Errors and Allele Dropout}
+
+\begin{figure}[tbp]
+ \includegraphics[width=.7\linewidth]{figs/Event_space.pdf}\\
+ \caption{
+  It depicts single cell events at a particular genomic site, defined by combinations of the possible true alternative nucleotide frequencies in single cell sequencing ($\theta_s$) and bulk sequencing samples ($\theta_b$) in our probabilistic model.
+  The bulk is always assumed to be a combination of a maximum of two genotypes at a particular site, generating all possible $\theta_b$ (bottom panel).
+  A tabular representation of the same event definitions is given in Table~\ref{tab:Events} below (this is a larger copy of Figure~\ref{fig:prosolo_alt-calling}D in the main manuscript, reproduced  here for easier cross-reference with that table).\footnotesize\newline
+  ADO -- allele dropout, alt -- alternative, err -- error, het -- heterozygous, hom -- homozygous, ref -- reference
+  }
+ \label{fig:event-space}
+\end{figure}
+
+\begin{center}
+ \begin{table}[tbp]
+  \caption{
+   Single cell events at a particular genomic site are defined by combinations of the possible true alternative nucleotide frequencies in single cell sequencing ($\theta_s$) and bulk sequencing samples ($\theta_b$) in our probabilistic model.
+   A graphical representation of the same event definitions is given in Figure~\ref{fig:event-space}.
+  }
+  \label{tab:Events}
+  \renewcommand{\arraystretch}{0.9}
+
+  \begin{tabular}{p{22ex}p{12ex}p{12ex}p{33ex}}
+   \toprule
+   single cell event & $\theta_s(x)$   & $\theta_b(x)$ & implicit single cell genotype \\
+   \toprule
+   $\boldsymbol{E}_{\text{hom ref}}$      & $0$             & $[0,\frac12)$ & homozygous ref                \\
+       \midrule
+   $\boldsymbol{E}_{\text{ADO to ref}}$   & $0$             & $[\frac12,1)$ & heterozygous                  \\
+         \midrule
+   $\boldsymbol{E}_{\text{err ref}}$      & $\{0,\frac12\}$ & $1$           & homozygous alt                \\
+         \midrule
+   $\boldsymbol{E}_{\text{err alt}}$      & $\{\frac12,1\}$ & $0$           & homozygous ref                \\
+         \midrule
+   $\boldsymbol{E}_{\text{het}}$          & $\frac12$       & $(0,1)$       & heterozygous                  \\
+         \midrule
+   $\boldsymbol{E}_{\text{ADO to alt}}$   & $1$             & $(0,\frac12]$ & heterozygous                  \\
+       \midrule
+   $\boldsymbol{E}_{\text{hom alt}}$      & $1$             & $(\frac12,1]$ & homozygous alt                \\
+   \bottomrule
+   \multicolumn{4}{l}{\footnotesize ADO -- allele dropout, alt -- alternative, err -- error, het -- heterozygous,}\\
+   \multicolumn{4}{l}{\footnotesize hom -- homozygous, ref -- reference} \\
+   \bottomrule
+  \end{tabular}
+ \end{table}
+\end{center}
+
+Using the above model for a genome position $g$, we can compute the likelihood of any combination of possible underlying alternative nucleotide frequencies in the single cell and the bulk sequencing sample, given the respective data.
+All the possible combinations of allele frequencies in the two samples define a two-dimensional space of allele frequencies $\boldsymbol{E}$ (Equation~\ref{eq:event-space}, Figure~\ref{fig:event-space}, Table~\ref{tab:Events}).
+We then define mutually exclusive subspaces of $\boldsymbol{E}$ as single cell events, for example the dropout of an alternative allele across allele frequencies $\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\theta_s} \times [\frac{1}{2}, 1)_{\theta_b}$, providing a set of events $\mathfrak{E}$.
+Assuming that there is no informative prior information about different allele frequencies (i.e. assuming a flat prior across all possible allele frequencies in both samples), we can then calculate the likelihood of such an event as the product of the likelihoods of the allele frequency ranges in the two samples.
+For $\boldsymbol{E}_{\text{ADO to ref}}$---and using Equation \ref{eq:thetas-likelihood} to calculate the likelihoods of the allele frequency ranges---this for example becomes:
+
+\begin{equation}
+  \label{eq:ado-to-ref-likelihood-samples}
+  \begin{split}
+    \Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{ADO to ref}})
+      =~&\Prob(\boldsymbol{Z}^s \mid \theta_s = 0) \times \Prob(\boldsymbol{Z}^b \mid \theta_b \in [\frac12,1))\\
+      =~&\sum_{k=0}^{l} \left\{ \Prob(\boldsymbol{Z}^s \mid \rho_s = \frac{k}{l}) \times \cB\cB_{l,\alpha, \beta} (\rho_s = \frac{k}{l}) \right\} \times\\
+        &\sum_{m=\frac{n}{2}}^{n-1} \Prob(\boldsymbol{Z}^b \mid \theta_b = \frac{m}{n})\\
+  \end{split}
+\end{equation}
+
+Here, we use the fact that for the bulk sample without amplification, we can assume that $\theta_b = \rho_b$ and thus use a simpler form of Equation \ref{eq:theta-likelihood}.
+Also, we take $n$ to be the total number of bulk reads and $m$ to be the possible numbers of reads with the alternative allele for this event---analogous to $k$ and $l$ for the single cell sample, and amounting to only taking point estimates of the likelihoods at possible alternative allele counts given the total coverage of the examined genomic site.
+
+As all the defined events (Equation~\ref{eq:event-set}) are mutually exclusive (Figure~\ref{fig:event-space}, Table~\ref{tab:Events}), the sum of the likelihoods of all events yields the marginal probability:
+
+\begin{equation}
+  \label{eq:marginal-prob}
+  \begin{split}
+    \Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b)
+      =~&\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E})     =~\sum_{\boldsymbol{E}_e \in \mathfrak{E}}{\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_e)}\\
+      =~&\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{hom ref}})~+~ \Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{hom alt}})~+\\
+        &\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{het}})~+\\
+        &\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{err alt}})~+~ \Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{ADO to alt}})~+\\
+        &\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{err ref}})~+~ \Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{ADO to ref}})
+  \end{split}
+\end{equation}
+
+Then, using Equation \ref{eq:read-product} for the likelihood of $\rho_s$ in the single cell sample and the equivalent relationship for the likelihood of $\theta_b$ in the bulk sample (with $j$ as an index running through all bulk sample reads), we get:
+
+\begin{equation}
+  \label{eq:ado-to-ref-likelihood-reads}
+  \begin{split}
+    \Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{ADO to ref}})
+      =~&\sum_{k=0}^{l} \left\{ \prod_{i=1}^{l} \Prob(Z_i^s \mid \rho_s = \frac{k}{l}) \times \cB\cB_{l,\alpha, \beta} (\rho_s = \frac{k}{l}) \right\} \times\\
+        &\sum_{m=\frac{n}{2}}^{n-1} \prod_{j=1}^{n} \Prob(Z_j^b \mid \theta_b = \frac{m}{n})\\
+  \end{split}    
+\end{equation}
+
+Using Equation \ref{eq:read_probability} for the likelihood of an individual read in the single cell sample given a $\rho_s$ and the respective formulation for an individual read in the bulk sample given a $\theta_b$, this will calculate the likelihood of the {\ttfamily ADO to ref} event as:
+
+\begin{equation}
+  \begin{split}
+  \label{eq:ado-to-ref-likelihood-data}
+    \Prob(\boldsymbol{Z}^s,&\boldsymbol{Z}^b \mid \boldsymbol{E}_{\text{ADO to ref}}) =\\
+    &\sum_{k=0}^{l} \left\{\vphantom{\prod_{i}{l}} \prod_{i=1}^{l} \right.\left( (1 - \pi_i^s) + a^s(Z_i^s)\times \pi_i^s \times (1 - \frac{k}{l}) + p^s(Z_i^s) \times \pi_i^s \times \frac{k}{l} \right) \times \\
+    &\qquad~~\left.\cB\cB_{l,\alpha, \beta} (\rho_s = \frac{k}{l}) \right\} \times\\
+    &\sum_{m=\frac{n}{2}}^{n-1} \left\{ \prod_{j=1}^{n} \left( (1 - \pi_j^b) + a^b(Z_j^b)\times \pi_j^b \times (1 - \frac{m}{n}) + p^b(Z_j^b) \times \pi_j^b \times \frac{m}{n} \right) \right\}\\
+  \end{split}
+\end{equation}
+
+Analogously, the likelihoods for all of the events as specified in Figure~\ref{fig:event-space} can be computed and their sum according to Equation \ref{eq:marginal-prob} is the marginal probability.
+We can use the marginal probability to calculate the posterior probability of the {\ttfamily ADO to ref} event with:
+
+\begin{equation}
+  \begin{split}
+  \label{eq:ado-to-ref-posterior-prob}
+    \Prob(&\boldsymbol{E}_{\text{ADO to ref}} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b) =\\
+    &~~\frac{1}{\sum_{\boldsymbol{E}_e \in \mathfrak{E}}{\Prob(\boldsymbol{Z}^s,\boldsymbol{Z}^b \mid \boldsymbol{E}_e )}} \times\\
+    &~~\sum_{k=0}^{l} \left\{\vphantom{\prod_{i}{l}} \prod_{i=1}^{l} \right.\left( (1 - \pi_i^s) + a^s(Z_i^s)\times \pi_i^s \times (1 - \frac{k}{l}) + p^s(Z_i^s) \times \pi_i^s \times \frac{k}{l} \right) \times \\
+    &~~\qquad~~\left.\cB\cB_{l,\alpha, \beta} (\rho_s = \frac{k}{l}) \right\} \times\\
+    &~~\sum_{m=\frac{n}{2}}^{n-1} \left\{ \prod_{j=1}^{n} \left( (1 - \pi_j^b) + a^b(Z_j^b)\times \pi_j^b \times (1 - \frac{m}{n}) + p^b(Z_j^b) \times \pi_j^b \times \frac{m}{n} \right) \right\}\\
+  \end{split}
+\end{equation}
+
+
+With analogous equations, we can compute the posterior probability for all of the events defined by ProSolo (Figure~\ref{fig:event-space}, Table~\ref{tab:Events}).
+Each of them is reported in the output VCF or BCF file.
+Based on the implicit single cell genotypes as given in Table~\ref{tab:Events}, we can then compute posterior probabilities for genotypes in the single cell by summing the posterior probabilities of all the events that imply each genotype.
+For the heterozygous case (light blue fields in Figure~\ref{fig:event-space}), this would be:
+
+\begin{equation}
+ \label{eq:het-posterior-prob}
+ \begin{split}
+  \Prob(\text{heterozygous}_s \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b) =~&
+    \Prob(\boldsymbol{E}_{\text{ADO to ref}} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b)~+ \\
+  &\Prob(\boldsymbol{E}_{\text{het}} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b)~+ \\
+  &\Prob(\boldsymbol{E}_{\text{ADO to alt}} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b)
+ \end{split}
+\end{equation}
+
+The genotype with the maximum probability among the three possible genotypes is then chosen.
+Similarly, we can also compute posterior probabilities for any compound event.
+For example, the overall posterior probability of an allele dropout at a particular site ({\ttfamily ADO} events in Figure~\ref{fig:event-space} and Table~\ref{tab:Events}) is:
+
+\begin{equation}
+ \label{eq:ado-posterior-prob}
+ \begin{split}
+  \Prob(\text{allele dropout} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b) =~&
+    \Prob(\boldsymbol{E}_{\text{ADO to ref}} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b)~+ \\
+  &\Prob(\boldsymbol{E}_{\text{ADO to alt}} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b)
+ \end{split}
+\end{equation}
+
+
+Another example is the probability of the presence of any alternative allele at a site (all blue fields in Figure~\ref{fig:event-space}, Equation \ref{eq:alt-posterior-prob} in the main manuscript).
+This posterior probability is the one used for the main benchmarking of ProSolo against the other existing single cell specific variant callers (MonoVar, SCAN-SNV, SCcaller, and SCIPhI), as SCcaller and SCIPhI only call the presence (vs. absence) of an alternative nucleotide and this is thus the only measure we can compare all tools on.
+
+
+\subsection{Implementation} \label{sec:implementation}
+
+ProSolo is an easy-to-use command-line tool (following usability standards \citep{taschuk_ten_2017}) and its source code is available at \url{https://github.com/prosolo/prosolo}, including instructions for an easy installation (via Bioconda \citep{gruning_bioconda:_2018}). 
+The main contribution in terms of software that ProSolo's development provided, is the implementation of its comprehensive statistical model that jointly looks at a single-cell and a bulk sample.
+This was implemented as a part of Varlociraptor, a variant calling library implemented in Rust \citep{koster_enhancing_2019}.
+Varlociraptor already makes use of all available sources of information regarding biases of normal sequencing data, induced by ambiguous alignments and sequencing errors, but had to be extended to accommodate this type of sample combination and to allow for accounting for amplification bias.
+Because Varlociraptor had originally been specializing in indels and structural variants, implementing ProSolo also meant further investment in expanding Varlociraptor's capabilities for basic SNV analysis and required some improvements in the handling of sequencing alignment data in the upstream library rust-htslib \citep{rust-htslib_htslib_nodate}, a Rust wrapper around htslib \citep{htslib_c_nodate}. 
+Further, we optimized Varlociraptor's calculations wherever possible, for example by reducing the number of redundant likelihood calculations and by caching frequently reused values.
+And finally, numerical issues required an addition to the upstream library rust-bio \citep{koster_rust-bio:_2016}. 
+
+\paragraph{False Discovery Rate (FDR) Control of Event Probabilities} \label{sec:fdr}
+
+Last---but not least---ProSolo can control the false discovery rate of any set of single cell events that a user defines.
+At any scale of high throughput sequencing data (from targeted panels over whole exome sequencing to whole genome sequencing), we generate a large amount of event calls and thus have to control for false discoveries, e.g.~by controlling the false discovery rate \citep{benjamini_controlling_1995}.
+Using Varlociraptor's functionality \citep{koster_enhancing_2019}, we can estimate thresholds on our posterior probabilities based on the approach described by \cite{muller_optimal_2004,muller_fdr_2006}.
+For ProSolo, we extended Varlociraptor's capabilities from estimating such thresholds for the posterior probability of a single event to estimating thresholds for any combination of the above defined events.
+For example, to control the false discovery rate for allele dropout events, we jointly obtain a threshold for the combination of the two ADO events in Figure~\ref{fig:prosolo_alt-calling}D.
+Or, to control the false discovery rate in identifying the presence of an alternative allele, we jointly obtain a threshold for the combination of all the respective events in Equation \ref{eq:alt-posterior-prob}. 
+This functionality, like the improvements mentioned in Section~\ref{sec:implementation}, is now also available in Varlociraptor's subcommands.
+
+
+\section{Benchmarking} \label{sec:suppl-benchmarking}
+
+All code used for benchmarking is available at: \url{https://www.github.com/prosolo/benchmarking_prosolo}.
+
+\subsection{Datasets and Ground Truths} \label{sec:suppl-datasets}
+
+We have performed our benchmarking analyses on two datasets, one previously published for the evaluation of SCcaller by \cite{dong_accurate_2017} and one generated especially for this Benchmarking (see Figure~\ref{fig:datasets} in the main manuscript).
+For them, we generated different kinds of ground truths:\\
+
+\textbf{Whole genome sequencing of almost identical kin-cells from a cell-line \citep{dong_accurate_2017}.}
+The first dataset is from the publication of a previous variant caller for single cell sequencing data generated using MDA, SCcaller (\cite{dong_accurate_2017}; Figure~\ref{fig:datasets}A).
+They started with one initial cell from a cell line and grew it in several steps (a complete overview of their setup is given in Figure 1 of \cite{dong_accurate_2017}).
+After an initial mini-expansion, they selected one single cell as the founder for their secondary IL expansion into 20-30 cells.
+From this they extracted two single cells (IL-11 and IL-12) that were sequenced after multiple displacement amplification (MDA).
+Both cells have a minimum coverage of five of at least 80\% of genomic sites (with only about 90\% of the used reference genome represented, as this includes a largely uncovered chromosome Y and alternative haplotype contigs which would only be covered if the particular haplotype is present), with IL-11 having a more even coverage that leads to more sites with a usable coverage (Figure~\ref{fig:coverage-dists}A).
+The rest of the kindred cells from that IL clone was then used as a bulk sequencing sample without MDA (IL-1C), showing a coverage profile similar to the whole genome amplified single cells (Figure~\ref{fig:coverage-dists}A).
+We generated the ground truth genotypes for this dataset from the kindred clone IL-1C, which should be only very few cell divisions away from the single cells, and thus have almost no difference in the somatic mutations acquired.
+The ground truth genotype was generated separately for variant sites and homozygous reference sites:
+for variant sites, GATK HaplotypeCaller was run, followed by variant quality score recalibration; for homozygous reference sites, we used bcftools mpileup to identify sites with a coverage above 25 but no alternative nucleotide present.
+This bulk sample (IL-1C) was only used as a ground truth and was not provided as input to any of the software compared here.
+Three more distant clones (C1, C2, C3 in Figure~\ref{fig:datasets}A), grown from the cells after the initial mini-expansion, were jointly used as a further bulk sample for SCcaller and ProSolo (see Software and Parameters below).
+With three separate bulk sequencing runs, their joint coverage of about 50 for 80\% of genomic sites is much higher than for the MDA single cells and the unamplified IL-1C bulk (Clones in Figure~\ref{fig:coverage-dists}A).\\
+
+\begin{figure}[!tpb]
+ \begin{minipage}{.99\linewidth}
+  \includegraphics[width=.99\linewidth]{figs/Dong2017/Dong2017_coverage_dist.pdf}
+ \end{minipage} \\
+ \begin{minipage}{.99\linewidth}
+  \includegraphics[width=.99\linewidth]{figs/Laehnemann2017/Laehnemann2017_coverage_dist.pdf}
+ \end{minipage}
+ \caption{
+ Sequencing coverage of targeted genomic sites for multiple displacement amplified (MDA) single cells and respective bulk samples.
+ Panel \textbf{A} shows the coverage of the single cells (IL-11, IL-12), the kindred ground truth clone (IL-1c) and the more distant background bulk (Clones C1, C2, and C3 joined into one sample) of the dataset from \cite{dong_accurate_2017}.
+ Panel \textbf{B} shows the coverage of the single cells (PAG1, PAG2, PAG5, PAG9, PAG10) and the background bulk (PNG) of the granulocyte data generated for this evaluation.
+ }
+ \label{fig:coverage-dists}
+\end{figure}
+
+\textbf{Whole exome sequencing of five human granulocytes with a pedigree ground truth.}
+For the second benchmarking dataset, Blood was taken from a patient after informed consent and granulocytes were sorted out in several steps: Initially, CD3- cells were captured via Magnetic-Activated Cell Sorting (MACS); among them, CD66b+ granulocytes were filtered out via Fluorescence Activated Cell Sorting (FACS) (Figure~\ref{fig:datasets}B).
+Single cells from that cell population were isolated using a Fluidigm C1 microfluidics chip and subjected to multiple displacement amplification (MDA) using the GE Healthcare GenomiPhi Kit in its version adapted to that microfluidic chip.
+With a panel of 16 custom primer pairs covering different genes across chromosomes used in a quantitative real-time PCR, we selected granulocytes where at least 15 of these loci were properly amplified.
+For those cells, we performed whole exome capture using the Agilent SureSelectXT Human All Exon V5+UTRs Kit.
+The paired-end sequencing library (2x101bp) was then prepared with the TruSeq V3 Kit and sequenced on a HiSeq 2500.
+From the remaining sorted cell population, we extracted bulk DNA and submitted it to the same whole exome capture and DNA sequencing without MDA.\\
+
+For the ground truth of this dataset, we could leverage previously published bulk whole exome sequencing data from the same person, their parents and three siblings (\cite{hoell_constitutional_2014}; Figure~\ref{fig:datasets}B).
+For ground truth alternative allele calls, we ran three pedigree-aware variant callers on the family whole exome data.
+To be able to run them reproducibly, we made all three of them available via bioconda \citep{gruning_bioconda:_2018}:
+\begin{itemize}
+  \item BEAGLE 4.0 \citep{browning_improving_2013}, bioconda version: {\ttfamily beagle=4.0\_06Jun17=1}
+  \item polymutt \citep{li_likelihood-based_2012}, bioconda version: {\ttfamily polymutt=0.18=0}
+  \item FamSeq in MCMC ({\ttfamily -method 3}) mode \citep{peng_rare_2013,peng_famseq:_2014}), bioconda version: {\ttfamily famseq=1.0.3=0}
+\end{itemize}
+From their calls, we created a consensus by only including sites where either all callers agree on a genotype or where a maximum of one caller has a \emph{missing} (as opposed to different genotype) call, while the other two callers agree on the genotype (Figure~\ref{fig:granulocytes-ground-truth}).
+The use of the full pedigree ensures high confidence genotypes---however, please bear in mind that these represent the germline genotype.
+Single cells will have accumulated somatic genotypes that differ from the germline and we are bound to mis-interpret those as false positive calls in our ground truth comparison.
+At the same time, the number of such somatic variants will be small compared to the number of germline variants, and should hence keep our overall ground truth comparison valid.\\
+
+\begin{figure}[!tpb]
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/ground_truth/Hoell2014_pedigree_consensus_calling.pdf}
+ \caption{
+   Constructing the germline ground truth genotype for our granulocytes dataset from the consensus of three pedigree-aware callers.
+   Variants were called on a previously generated whole exome bulk sequencing data set of the person's family (Figure~\ref{fig:datasets}), which is separate from the single cell and bulk whole exome sequencing data generated for this study.
+   Variants were called using beagle, FamSeq and polymutt with total counts of individual tools (bottom left bar plot) and tool intersections of sites called (top bar plot) in grey.
+   Black fractions of bars represent the sites selected for our consensus: sites where either all callers agree upon a genotype or at least two callers agree upon a particular genotype and the third tool has a missing genotype (i.e.~doesn't contradict the genotype called by the other two).
+ }
+\label{fig:granulocytes-ground-truth}
+\end{figure}
+
+\subsection{Software and Parameters}
+
+ProSolo was compared against the available tools for single nucleotide variant calling in single cell sequencing data from multiple displacement amplified (MDA) DNA, MonoVar \citep{zafar_monovar:_2016}, SCAN-SNV \citep{luquette_identification_2019}, SCcaller \citep{dong_accurate_2017}, and SCIPhI \citep{singer_single-cell_2018}.\\
+
+For ProSolo (version {\ttfamily 0.6.1} installed via bioconda), each single cell was called against the respective cell's bulk (the joined clones 1, 2 and 3 for the \citep{dong_accurate_2017} dataset, PNG for our own dataset, see Figure~\ref{fig:datasets}).
+Candidate sites to call were generated using bcftools mpileup, taking all sites where at least one read covered a non-reference nucleotide in the single cell or its respective bulk.
+We ran two different modes of the software: Calling sites with a minimum read coverage of 1 in the single cell sample (default mode in Figure~\ref{fig:alt-calling_prec-rec}) or including zero-coverage sites, effectively imputing genotypes at these sites from the bulk sample (imputation).
+The different filter thresholds used represent the false discovery rate ({\ttfamily --fdr}) that we can control for (Section~\ref{sec:fdr}).\\
+
+For MonoVar (version {\ttfamily 0.0.1}, which is commit {\ttfamily e0cf2db} cleaned up for the bioconda version we created), parameters were set as recommended in the software repository README \citep{zafar_monovar_nodate}.
+We ran two different modes of the software, with consensus filtering between cells of a population ({\ttfamily -c~1}) and without the filtering ({\ttfamily -c~0}).
+The different filter thresholds used represent the parameter {\ttfamily -t} being varied.
+However, turning on the consensus filtering did not cause any substantial changes, possibly due to the low number of cells sequenced (Figure~\ref{fig:alt-calling_prec-rec_global}).
+Varying the parameter {\ttfamily -t} did not cause any substantial changes in MonoVar results, either.\\
+
+SCAN-SNV \citep{luquette_identification_2019} was installed via the install instruction in the repository on 2019-10-30\footnote{
+ This are the install instructions at the repository state at \url{https://github.com/parklab/scan-snv/blob/62b7dcbc21e6cac64dc384abdfa708120e33819c/README.md}.
+ This includes the following packages and versions from the custom conda channel \url{https://anaconda.org/jluquette}:
+ {\ttfamily r-scansnv~0.1}, {\ttfamily scansnv~0.9}, {\ttfamily r-fastghquad~1.0} and {\ttfamily natefoo-slurm-drmaa~1.2.0}.
+ Further, it requires manual registration of the java executable for {\ttfamily gatk~3.8}.
+} and patched locally to make it run.
+The pipeline was then run with parameters set as recommended in the software repository {\ttfamily README.md} and the command line help, with the only changes made for a better comparability with the other tools.
+Namely, we tried to call as sensitively as possible by setting: {\ttfamily  --min-sc-alt~1 --min-sc-dp~1 --min-bulk-dp~1}.
+However, the default pipeline only provides calls for somatic variants (variants only found in single cells, not in the bulk, as opposed to all the present alternative alleles), heavily filtering candidate sites before calling.
+We thus attempted a fairer alternative allele calling comparison by modifying the pipeline to remove the filter that eliminates alternative alleles also seen in the bulk sample and the filter that eliminates known dbsnp variation\footnote{
+ I.e.~we edited the snakemake {\ttfamily rule scansnv\_somatic\_sites} to exclude the following requirements:
+ {\ttfamily tab[,bulk.alt] == 0 \& tab[,bulk.idx] == '0/0' \& tab\$dbsnp == '.'}.
+}.
+The different filter thresholds used represent the {\ttfamily --fdr} parameter, which---according to the authors---does not formally control the false discovery rate \citep{luquette_identification_2019}.\\
+
+For SCcaller (version {\ttfamily 1.2}, as available on bioconda), default parameters were set as recommended in the software repository README \citep{dong_sccaller_2018}.
+We ran four different modes of the software, varying two things:
+\begin{enumerate*}
+ \item For the heterozygous candidate sites that SCcaller requires as input, we either used dbSNP \citep{sherry_dbsnp:_2001,ncbi_database_2016} entries or generated them from the bulk background sample that was also used for calling in ProSolo, running GATK HaplotypeCaller.
+ As the dbSNP-derived heterozygous candidate sites consistently outperformed those generate from the bulk background sample, only results using dbSNP are reported in the figures, to provide a cleaner comparison.
+ \item In addition to the recommended settings that require a minimum coverage of 10 (default, {\ttfamily --min~10 --minvar~4 --RD~20}), we also ran SCcaller with reduced coverage requirements to increase sensitivity for a fairer comparison with ProSolo (sensitive, {\ttfamily --min~4 --minvar~1 --RD~10}), thus including sites with a minimum read coverage of 4 and down to one read covering the alternative nucleotide.
+\end{enumerate*}
+The three filtering thresholds used represent the filtering levels available for the {\ttfamily -a cutoff} command-line parameter.
+The filtering threshold gave certain leverage over the precision-recall trade-off and reducing the coverage requirements improved the sensitivity of results (Figure~\ref{fig:alt-calling_prec-rec_global}).\\
+
+For SCIPhI (version {\ttfamily 0.1.4}, as available on bioconda), we ran two different modes:
+\begin{enumerate*}
+ \item The default parameters of the command line tool ({\ttfamily default}).
+ \item Fewer iterations ({\ttfamily -l~400000}, because of the excessive run time) and more {\ttfamily sensitive} by turning off all heuristic filters ({\ttfamily --cwm~1 --mnp~1 --ms~1 --bns~0 --bnc~0 --ncf~0 --mnc~1}).
+\end{enumerate*}
+On the whole exome dataset with five cells, SCIPhI ran for three weeks for each of these modes.
+On the whole genome dataset with two cells, an initial run of SCIPhI was killed due to a server problem after running for more than eight weeks.
+An attempt to restart from intermediate data using the {\ttfamily --il} command line parameter had the model estimations escalating towards unrealistic values, and the crash was thus left unrecoverable.
+A rerun on a server with more performant CPUs led to the sensitive mode finishing after 5 weeks and the default mode after 7.5 weeks.
+As no option for filtering or thresholding based on sensitivity vs. specificity is available, only two unfiltered data points are given in the respective plots (Figure~\ref{fig:alt-calling_prec-rec_global}).
+
+\subsection{Alternative Allele Calling}
+
+The most precise single cell variant callers to date, SCcaller and SCIPhI, can only call the presence vs. the absence of an alternative allele (i.e.~the heterozygous and the homozygous alternative genotypes called jointly).
+We have thus focused on this for the main part of our benchmarking.
+
+For ProSolo, the posterior probability of the presence of an alternative allele is calculated with Equation \ref{eq:alt-posterior-prob}, which represent the blue Event areas in Figures~\ref{fig:prosolo_alt-calling}D and \ref{fig:event-space}.
+
+Calculations of $p$recision and $r$ecall were based on true positives (TP, alternative allele present in the ground truth and called by the respective software), false positives (FP, the respective software calls the presence of an alternative allele that does not exist in the ground truth at that site), and false negatives (FN, the respective software makes no call or calls a homozygous reference genotype at a ground truth site with an alternative allele), using the formulas:
+
+\begin{equation}
+  \label{eq:precp-rec}
+  \begin{split}
+    p &= \frac{TP}{TP + FP} \\
+    r &= \frac{TP}{TP + FN}
+  \end{split}
+\end{equation}
+
+\begin{figure}[!tpb]
+ \begin{minipage}{.36\linewidth}
+  \includegraphics[height=42ex]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot.pdf} \newline
+ \end{minipage}
+ \begin{minipage}{.55\linewidth}
+  \includegraphics[height=42ex]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot.pdf} \newline
+ \end{minipage}
+ \caption{
+  Global view of the precision-recall plots for alternative allele calling across different software modes and filtering thresholds (for zoomed in view on the most interesting areas of the plot, see main manuscript Figure~\ref{fig:alt-calling_prec-rec}).
+  \textbf{A} Precision and recall average of two whole genome sequenced single cells IL-11 and IL-12 against their kindred clone IL-1c as ground truth genotypes.
+  \textbf{B} Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.\newline \footnotesize
+  Thresholds used were applied via the following command line options:
+  MonoVar {\ttfamily --t};
+  ProSolo {\ttfamily --fdr};
+  SCAN-SNV {\ttfamily --fdr};
+  SCcaller {\ttfamily -a cutoff};
+  SCIPhI {\ttfamily none available}.
+  Software modes:
+  MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
+  ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
+  SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
+  SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
+  }
+ \label{fig:alt-calling_prec-rec_global}
+\end{figure}
+
+The whole genome cell line dataset (Figure~\ref{fig:datasets}A) seems much less challenging than the other dataset: all methods achieve high precision in alternative allele calling (Figures~\ref{fig:alt-calling_prec-rec_global}A and \ref{fig:alt-calling_prec-rec}A), at recall rates of 45\% and higher. 
+In comparison with all other tools, ProSolo achieves the most striking increases in recall of nearly 10\%.
+For example, for a precision above 99\%, its maximum recall is 76.6\% compared to 70.5\% for MonoVar, 68.7\% for SCIPhI and 61.0\% for SCcaller.
+SCAN-SNV achieves up to 99.2\% precision, but only 0.01\% recall.
+This can be explained by it aiming at somatic mutations, while the vast majority of SNVs in a genome will be germline variants.
+
+Although a relative increase in recall of about 10\% at utmost precision is certainly remarkable, ProSolo demonstrates its power on the second (whole exome) dataset.
+This dataset is considerably more challenging than the first one.
+See Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B for respective results.
+For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above 99\%, with ProSolo reaching a 20\% increase of recall to 17.6\%, compared to SCIPhI's 14.6\%, and SCcaller with 7.2\% (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
+In comparison, MonoVar achieved a maximum precision of only 96.29\%. However, this was at a much higher recall (14.13\%) than for example SCcaller (9.55\% at a precision of 97.23\%).
+SCcaller's decreased recall on this dataset might be due to its estimation of local allelic bias by also taking biases at neighboring sites into account---in whole exome data the number of neighboring sites available for this estimation will be limited and might lead to less reliable estimates.
+On this dataset, SCAN-SNV's recall increased to 0.16\% at a decreased maximum precision of 89.7\%.
+Most likely, this decreased precision is an artefact of using the germline genotype as ground truth.
+At the sites with somatic mutations in single cells, which SCAN-SNV focuses on, this ground truth will instead contain the germline genotype and will incorrectly classify alternative alleles as false positives.
+Due to this effect, we also expect the calculated precision of all the other tools to be an underestimate, but against the backdrop of large numbers of sites where the single cells harbour the germline genotype, the effect will be much smaller.
+The same ground truth caveat also applies---inversely---for the recall of SCIPhI's sensitive mode and ProSolo's imputation mode.
+Whenever coverage of a site is missing in a single cell, SCIPhI may impute the genotype with the last common ancestor genotype of the most closely related cells, while ProSolo will impute to the majority genotype in the bulk sample.
+While both strategies provide a biologically meaningful imputation that will be more useful than post-hoc modes of imputation, we expect that a number of imputed sites were incorrectly classified as true positives with this germline ground truth.
+As this will lead to an overestimation of the recall, we have excluded both SCIPhI's sensitive mode and ProSolo's imputation mode from the discussion of this dataset---however, their results are nevertheless displayed in all respective figures.
+
+\begin{figure}[!tpb]
+ \begin{minipage}[t]{.35\linewidth}
+ \vspace{0pt}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf} \newline
+ \end{minipage}
+ \begin{minipage}[t]{.64\linewidth}
+ \vspace{0pt}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf} \newline
+ \end{minipage}
+ \caption{
+ Cell-specific $F_1$ scores for different filtering threshold levels for \textbf{A} the whole genome dataset and \textbf{B} the whole exome dataset.\newline \footnotesize
+  Thresholds used were applied via the following command line options:
+  MonoVar {\ttfamily --t};
+  ProSolo {\ttfamily --fdr};
+  SCAN-SNV {\ttfamily --fdr};
+  SCcaller {\ttfamily -a cutoff};
+  SCIPhI {\ttfamily none available}.
+  Software modes:
+  MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
+  ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
+  SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
+  SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
+ }
+ \label{fig:F_1-scores}
+\end{figure}
+
+ProSolo's improvements in accuracy can be further formalised using the $F_1$ score, the harmonic mean of precision $p$ and recall $r$, with $\beta = 1$ for the general $F$ score defined as \citep{van_rijsbergen_evaluation_1979,chinchor_muc-4_1992}:\\
+
+\begin{equation} \label{eq:F_1_score}
+  F_{\beta} = (\beta^2 + 1) \times \frac{p r}{\beta^2 p + r}
+\end{equation}
+
+The per-cell $F_1$ score clearly demonstrates ProSolo's performance advantage (Figure~\ref{fig:F_1-scores}), even when restricting our comparison to ProSolo's (and SCIPhI's) default mode for a fairer comparison on the whole exome dataset with a germline ground truth (see caveat discussed above).
+
+\begin{figure}[!tpb]
+ \begin{minipage}[t]{.4\linewidth}
+ \vspace{0pt}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo_FDR_ground_truth_vs_theoretical.pdf} \newline
+ \end{minipage}
+ \begin{minipage}[t]{.59\linewidth}
+ \vspace{0pt}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo__FDR_ground_truth_vs_theoretical.pdf} \newline
+ \end{minipage}
+ \caption{
+ False discovery rate (FDR, $1 - p$recision) as calculated based on the ground truth, compared to the theoretical FDR we controlled for using ProSolo, for (A) the whole genome data set and (B) the whole exome data set.
+ The diagonal indicates identity of the ground truth FDR with the FDR that was controlled for.
+ Any points underneath it indicate overly conservative FDR control, any points above it indicate an FDR control that is too lenient.\newline \footnotesize
+  Thresholds used were applied via the following command line options:
+  MonoVar {\ttfamily --t};
+  ProSolo {\ttfamily --fdr};
+  SCAN-SNV {\ttfamily --fdr};
+  SCcaller {\ttfamily -a cutoff};
+  SCIPhI {\ttfamily none available}.
+  Software modes:
+  MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
+  ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
+  SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
+  SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
+ }
+ \label{fig:FDR-ground-truth-vs-theoretical}
+\end{figure}
+
+\subsection{False Discovery Rate Control of Alternative Allele Calling} \label{sec:fdr-of-alt-calling}
+
+Finally, a feature where ProSolo clearly stands out, is the control over the false discovery rate.
+As can be seen in Figure~\ref{fig:alt-calling_prec-rec} (and Figure~\ref{fig:alt-calling_prec-rec_global}), ProSolo provides flexible control over precision vs. recall via specifying a false discovery rate of interest.
+While no other tool provides a formal control over the easily interpretable false discovery rate, several of the tools provide other types of thresholds which we varied in attempts to achieve higher precision or recall.
+However, none of them provide control over similar ranges of precision and recall.
+Thus, ProSolo is the only tool that provides the user with the choice of either aiming for more discoveries at the cost of a higher rate of false discoveries, or at aiming for a more limited number of discoveries with higher confidence in each of them.
+
+Further, Figure~\ref{fig:FDR-ground-truth-vs-theoretical}A demonstrates, that ProSolo provides a rigorous control over the false discovery rate on the whole genome dataset.
+The only exception---in both default and imputation mode---is when attempting to control for a false discovery rate below 0.0001.
+This indicates, that ProSolo's model still needs refinement in its resolution for sites with a very high likelihood of an alternative allele present.
+A similar trend can be seen on the whole exome dataset (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}B), but for any attempt to control for a false discovery rate below 0.02.
+This is within the common range of values often chosen as a false discovery rate to control for in practice and not being able to actually achieve the false discovery rate control at such values is usually unacceptable.
+However, as also discussed above, we generally expect the precision (of all tools) to be underestimated on this dataset: using the germline genotypes as ground truth results in misclassifying actual somatic variants in single cells as false positives.
+This underestimation of precision on this dataset in turn means an overestimation of the false discovery rate ($1 - p$recision), and is thus to be expected.
+This artefact of using a germline ground truth also shows in the discrepancy in the ground-truth based false discovery rate between ProSolo's default and imputation mode when controlling for higher false discovery rates.
+As expected, imputation turned out less precise in the whole genome dataset (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}A).
+In contrast, imputation seems to have improved precision for the whole exome dataset (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}B).
+This would suggest that the larger call set from ProSolo's imputation mode (with a higher recall) is also more precise than the smaller call set from the default mode.
+However, this increase in precision is most likely explained by an imputation towards the majority genotype in the bulk sample that will usually favor the germline genotype at a site, no matter what the actual single cell genotype would be.
+Taken together, this indicates that the false discovery rate that we can calculate with the given germline ground truth for the whole exome dataset is higher than the actual value would be with a more accurate (somatic) ground truth available.
+
+
+\subsection{Allele dropout rate calculations} \label{sec:suppl-adr-calc}
+
+Leveraging our ground truths and using three different ways to calculate the allele dropout rate, we can confirm the general validity of the respective event definitions (Figure~\ref{fig:prosolo_alt-calling}D) and evaluate limitations.
+For this, we will focus on the set of sites where the respective ground truth call is heterozygous, as these are the sites where the dropout of one of the alleles can be identified clearly.\\
+
+The first way of calculating the allele dropout rate leverages the posterior probabilities generated by the ProSolo model (Equation \ref{eq:ado-posterior-prob}).
+At each ground truth heterozygous site, we sum up the probabilities of the two allele dropout events defined in ProSolo ("ADO to alt" and "ADO to ref" in Figure~\ref{fig:prosolo_alt-calling}D) to obtain a total allele dropout probability (see Equation \ref{eq:ado-posterior-prob}).
+Obtaining the expected value of the allele dropout rate then constitutes adding those totals across all ground truth heterozygous sites with coverage and dividing by their number.
+This gives us an expected allele dropout rate based on the data and the ProSolo model ("expected value" in Figure~\ref{fig:allele-dropout}):
+
+\begin{equation}
+    \frac{\displaystyle\sum_{\substack{\text{covered ground truth}\\\text{heterozygous sites}}}  \Prob(\text{allele dropout} \mid \boldsymbol{Z}^s,\boldsymbol{Z}^b )}{\text{\# covered ground truth heterozygous sites}}
+    \label{eq.expected-allele-dropout-rate}
+\end{equation}\\
+
+The two ways to validate this expected allele dropout rate both depend on a comparison against the respective ground truth genotypes.
+One important difference in the ground truth used here, compared to the ground truth used for alternative allele calling, is that we further filtered the ground truth for the \cite{dong_accurate_2017} dataset.
+For this dataset, the basic ground truth was generated using GATK HaplotypeCaller and variant quality score recalibration.
+However, this recalibration optimises on the presence (heterozgyous or homozygous alternative) vs. the absence (homozygous reference) of an alternative allele and filtered genotypes will not reliably distinguish between heterozygous genotypes and homozygous alternative genotypes.
+We thus excluded all sites where the genotype quality ({\ttfamily GQ} FORMAT field) is below a PHRED score of 30.
+This corresponds to a 0.1\% probability of having erroneously called the current genotype over the second most likely genotype, and thus also filters for a clear distinguishability between heterozygous and homozygous alternative genotypes.
+This is important both for identifying allele dropout and for identifying exact genotypes as in Section~\ref{sec:suppl-gt-calling}.
+
+The first validation of these rates from within ProSolo is to genotype all the ground truth heterozygous sites with ProSolo.
+We take the most likely genotype (i.e.~the genotype whose coloured event area in Figure~\ref{fig:prosolo_alt-calling}D has the highest joint probability).
+Then, every ground truth heterozygous site that ProSolo calls as homozygous is counted as a dropout site and the number of dropout sites is divided by the total number of ground truth heterozygous sites where the respective single cell had coverage.
+This gives an allele dropout rate based on a comparison against the ground truth ("hom at ground truth het" in Figure~\ref{fig:allele-dropout}):
+
+\begin{equation}
+    \frac{\text{\# ground truth heterozygous sites called homozygous}}{\text{\# covered ground truth heterozygous sites}}
+    \label{eq.hom-at-ground-truth-het-allele-dropout-rate}
+\end{equation}\\
+
+A second validation of these rates is another comparison against the ground truth, but without using ProSolo in any way.
+For each single cell, using samtools mpileup, we identify all heterozygous ground truth sites with a coverage of at least 7.
+Without amplification bias we could be reasonably sure to sample both alleles of a heterozygous site at coverage 7 (the probability to sample only one allele with a coverage of 7 would be: $2 \cdot 0.5^7 = 0.015625$).
+We then count a site as an allele dropout, if there is one allele (reference or alternative) with no read coverage at all.
+The allele dropout rate is the fraction of allele dropout sites within the respective cell's heterozygous ground truth sites ("no alt/ref read at ground truth het" in Figure~\ref{fig:allele-dropout}):
+
+\begin{equation}
+    \frac{\text{\# ground truth heterozygous site with only one allele covered}}{\text{\# covered ground truth heterozygous sites}}
+    \label{eq.no-alt-ref-read-at-ground-truth-het-adr}
+\end{equation}\\
+
+The expected allele dropout rates based on the ProSolo probabilities for allele dropout fall into the range of previously published allele dropout rates \citep{wang_clonal_2014,hou_single-cell_2012,xu_single-cell_2012,ling_evaluation_2009,spits_whole-genome_2006,renwick_proof_2006,lodato_somatic_2015} ("published" in Figure~\ref{fig:allele-dropout}).
+This analysis also shows that the ProSolo expected allele dropout rates, based on the model's probabilities, correspond with those based on the comparison of ProSolo genotypes with the ground truth (Figure~\ref{fig:allele-dropout}), demonstrating that the explicit modelling of allele dropout events is useful for genotyping.
+However, in that comparison, the expected allele dropout rate is consistently underestimated on our own whole exome data ("granulocytes" in Figure~\ref{fig:allele-dropout}), while it is slightly overestimated for the data from \cite{dong_accurate_2017} ("Dong 2017" in Figure~\ref{fig:allele-dropout}).
+These deviations in the estimation in different directions suggest that the empirical distributions we currently use do not fit all datasets.
+Instead, they most likely depend on the respective whole genome amplification and library preparation procedures, as well as other possible batch effects.
+This conclusion is further supported by the much lower naively calculated allele dropout rate in the high coverage cells of the two datasets (IL-11 in \cite{dong_accurate_2017}, PAG1 and PAG10 in our granulocytes, compare \ref{fig:coverage-dists}).
+Here, the empirical distributions used seem to overestimate allele dropout and the performance of ProSolo could be further improved with distributions tailored to the specific dropout profile of the experiment on that individual cell.
+However, this overestimation of the allele dropout probability does not seem to impact the genotyping resolution (see below, Figures~\ref{fig:gt-calling-true-false-colouring} and \ref{fig:gt-calling-gt-colouring}).
+
+
+\subsection{Genotype calling} \label{sec:suppl-gt-calling}
+
+As a further performance comparison, we want to include a direct comparison of the actual called genotypes against the ground truth genotypes of the respective data set.
+As only ProSolo, MonoVar and SCAN-SNV provide actual genotype calls---a further refinement over the alternative allele calling described above---SCcaller and SCIPhI cannot be included in this comparison.
+Further, the small numbers of calls made by SCAN-SNV would not be interpretable in the figures provided, and we have thus also excluded SCAN-SNV from this comparison.
+
+Comparisons provided here are based on the software modes that achieved the highest $F_1$ score across most single cells for alternative allele calling (Figure~\ref{fig:alt-calling_prec-rec}C).
+For ProSolo, this amounts to the default mode without imputation (which also ensures a fair comparison against the germline-based ground truth) and controlling for a false discovery rate of $0.2$.
+For MonoVar, this means no consensus filtering and no filtering via the {\ttfamily --t} thresholding parameter.\\
+
+\begin{figure}[!tpb]
+ \begin{minipage}{.45\linewidth}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_genotyping_recall_prosolo_monovar.pdf}
+  \end{minipage}
+ \begin{minipage}{.53\linewidth}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_genotyping_recall_prosolo_monovar.pdf}
+ \end{minipage}
+ \begin{minipage}{.45\linewidth}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_genotyping_precision_prosolo_monovar.pdf}
+  \end{minipage}
+ \begin{minipage}{.53\linewidth}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_genotyping_precision_prosolo_monovar.pdf}
+ \end{minipage}
+ \caption{
+  Genotype calling precision and recall in comparison against the respective ground truth genotypes (from IL-1c in the left plots; from PNG in the plots on the right).
+  MonoVar and ProSolo were run with the parameters that maximised the $F_1$ score alternative allele calling (Figure~\ref{fig:alt-calling_prec-rec}C).
+  Facet labels at the top of plots indicate the single cell.
+  Facet labels on the right side of plots indicate the genotype:
+  "1/1" for homozgyous alternative, "0/1" for heterozygous.
+  \textbf{A} Recall of ground truth genotypes.
+  Here, facet labels on the right side of plots indicate the ground truth genotype compared against.
+  ProSolo provides a genotype call at more of the ground truth sites, with a slight but noticeable increase of false genotypes provided at ground truth heterozygous sites.
+  \textbf{B} Precision of called genotypes.
+  Here, facet labels on the right side of plots indicate the genotype of the caller.
+  The higher amount of calls by ProSolo (most noticeable for heterozygous calls for the whole genome datasets, and homozygous alternative calls for the whole exome datasets) trades off with a loss in precision.
+  }
+\label{fig:gt-calling-true-false-colouring}
+\end{figure}
+
+\begin{figure}[!tpb]
+ \begin{minipage}{.45\linewidth}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_genotyping_calls_per_ground_truth_prosolo_monovar.pdf} \\
+  \end{minipage}
+ \begin{minipage}{.53\linewidth}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_genotyping_calls_per_ground_truth_prosolo_monovar.pdf} \\
+ \end{minipage}
+ \begin{minipage}{.45\linewidth}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_genotyping_ground_truth_per_calls_prosolo_monovar.pdf} \\
+  \end{minipage}
+ \begin{minipage}{.53\linewidth}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_genotyping_ground_truth_per_calls_prosolo_monovar.pdf} \\
+ \end{minipage}
+ \caption{
+  Genotype calling comparison against the respective ground truth genotypes (from IL-1c in the left plots; from PNG in the plots on the right).
+  MonoVar and ProSolo were run with the parameters that maximised the $F_1$ score alternative allele calling (Figure~\ref{fig:alt-calling_prec-rec}C).
+  Panels A and B correspond to the respective panels in Figure~\ref{fig:gt-calling-true-false-colouring}, but with a finer resolution of the false genotypes.
+  Facets at the top of plots indicate the single cell.
+  \textbf{A} Genotypes called by the respective tool are indicated by the colouring, for the respective ground truth genotypes  as indicated by the facets on the right side of the plots.
+  \textbf{B} Ground truth genotypes are indicated by the colouring, for the genotypes called by the respective tool as indicated by the facets on the right side of the plots.
+  Both tools show visible amounts of misclassification in most of the possible categories.
+  }
+\label{fig:gt-calling-gt-colouring}
+\end{figure}
+
+Plotting the overall precision and recall of ProSolo and MonoVar genotyping (Figure~\ref{fig:gt-calling-true-false-colouring}), demonstrates that the higher recall of ProSolo is limited to the calling of heterozygous genotypes for the whole genome datasets (IL-11, IL-12 in Figure~\ref{fig:gt-calling-true-false-colouring}A).
+For the whole exome dataset, ProSolo achieves a higher recall of both heterozygous and homozygous alternative ground truth genotypes (PAG cells in Figure~\ref{fig:gt-calling-true-false-colouring}A).
+However, the recall remains much lower in this dataset, possibly due to the more uneven coverage of the respective cells and the lower coverage of the background bulk sample (PNG in Figure~\ref{fig:coverage-dists}).
+
+Wherever ProSolo generates more genotype calls---be they heterozygous or homozygous alternative calls---it also makes more errors (Figure~\ref{fig:gt-calling-true-false-colouring}B).
+In the only case where ProSolo does not generate more calls than MonoVar---homozygous alternative calls in the whole genome datasets---it also does not show a noticeable increase in false genotype calls.
+
+When looking at the exact genotype miscalls (Figure~\ref{fig:gt-calling-gt-colouring}), it becomes apparent that the higher amount of miscalls at higher recall in ProSolo is biased for heterozygous calls made by ProSolo (Figure~\ref{fig:gt-calling-gt-colouring}B):
+Heterozygous calls made by ProSolo are more often at ground truth homozygous reference sites, whereas heterozygous calls at ground truth homozygous alternative sites do not occur more often than for MonoVar.
+Thus, while MonoVar heterozygous calls are more likely to be miscalled homozygous alternative sites than miscalled homozygous reference sites, the inverse holds for ProSolo.
+This indicates, that both models are not yet well-balanced.
+For ProSolo, a further improvement could be to adapt the amplification bias distributions currently used (see Section~\ref{sec:better_beta-binom} for some suggestions).
+Also, learning distributions from the data at hand could further improve precision and recall wherever data is more uniformly distributed than in the dataset the current distributions are derived from \citep{lodato_somatic_2015}.
+
+Altogether, the genotype-level analysis also confirms that a higher and more uniform coverage of the single cell data leads to higher precision and recall in the variant calling, no matter which caller is used.
+E.g.~for the---most evenly covered---whole genome sequencing data (Figure~\ref{fig:coverage-dists}A), both callers achieve a very high recall of ground truth homozygous alternative sites with a very high precision (left panels in Figures~\ref{fig:gt-calling-true-false-colouring} and \ref{fig:gt-calling-gt-colouring}).
+Also, for the whole exome data (right panels in Figures~\ref{fig:gt-calling-true-false-colouring} and \ref{fig:gt-calling-gt-colouring}), recall is visibly higher for all genotypes across both tools in the samples with a higher and more uniform coverage (PAG1 and PAG10, see Figure~\ref{fig:coverage-dists}), and precision is noticeably higher in those samples for MonoVar.
+
+\subsection{Further Software and Resources used}
+
+All analysis code for both the main processing pipeline and the manuscript figures is available at: \url{https://github.com/prosolo/benchmarking_prosolo}.
+An overview and citations of software and resources beyond those mentioned in the methods section are provided in Table~\ref{tab:software-overview}.
+
+\begin{center}
+ \begin{table}[tbp]
+  \caption{Software and related resources used in this manuscript. All software versions as installed with conda.}
+  \label{tab:software-overview}
+  \begin{tabular}{llll}
+    \toprule
+    software / resource & version   & purpose                       & citation \\
+    \toprule
+    cutadapt            & 1.14      & adapter trimming              & \citep{martin_cutadapt_2011} \\
+    \midrule
+    trimmomatic         & 0.36      & quality trimming              & \citep{bolger_trimmomatic_2014} \\
+    \midrule
+    bwa mem             & 0.7.15    & read alignment / mapping      & \citep{li_aligning_2013} \\
+    \midrule
+    samtools            & 1.4.1     & handle SAM / BAM files        & \citep{li_sequence_2009} \\
+    \midrule
+    picardtools         & 2.9.2     & mark duplicates               &  \\
+    \midrule
+    bcftools            & 1.6       & handle VCF / BCF files        & \citep{danecek_variant_2011} \\
+    \midrule
+    mosdepth            & 0.2.5     & coverage calculations         & \citep{pedersen_mosdepth_2018} \\
+    \midrule
+    Okabe Ito palette   &           & colorblind-safe               & \citep{okabe_color_2008} \\
+    \midrule
+    ggthemes            & 0.2.5     & Okabe Ito palette             & \citep{arnold_ggthemes_2019} \\
+    \midrule
+    Brewer palettes     &           & colorblind-friendly           & \citep{brewer_colorbrewer_2006} \\
+    \midrule
+    RColorBrewer        & 1.1\_2     & Brewer palettes              & \citep{neuwirth_rcolorbrewer_2014} \\
+    \midrule
+    tidyverse           & 1.1.1     & ground truth comparisons      & \citep{wickham_welcome_2019} \\
+                        & 1.3.0     & results data handling         &  \\
+    \midrule
+    ggplot2             & 3.2.1     & result plots                  & \citep{wickham_ggplot2_2016} \\
+    \midrule
+    Inkscape            & 0.92.4    & info-graphics, improved labels & \\
+    \midrule
+    VGAM                & 1.1\_1     & distributions in R            & \citep{yee_vgam_2008,yee_vector_2015} \\
+    \midrule
+    UpsetR              &           & set intersection plot \ref{fig:granulocytes-ground-truth} & \citep{conway_upsetr_2017} \\
+    \bottomrule
+  \end{tabular}
+ \end{table}
+\end{center}
+
+
+\bibliographystyle{abbrvnat}
+\bibliography{Benchmarking_ProSolo.bib}
+
+\end{document}

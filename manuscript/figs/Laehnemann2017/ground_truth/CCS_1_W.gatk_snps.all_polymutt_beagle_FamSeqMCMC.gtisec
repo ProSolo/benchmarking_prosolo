@@ -1,0 +1,17 @@
+# This file was produced by bcftools +GTisec (1.9+htslib-1.9)
+# The command line was:	bcftools +GTisec CCS_1_W.gatk_snps.all_polymutt_beagle_FamSeqMCMC.bcf 
+# This file can be used as input to the subset plotting tools at:
+#   https://github.com/dlaehnemann/bankers2
+# Genotype intersections across samples:
+@SMPS FamSeq_MCMC beagle polymutt
+# Subset intersection counts are in global banker's sequence order.
+#   After exclusive sample counts in order of the SMPS-line, banker's sequence continues with:
+#   FamSeq_MCMC,beagle   FamSeq_MCMC,polymutt   ...
+# [1] Number of shared non-ref genotypes
+178057
+354231
+71610
+20801
+491925
+147333
+1128361

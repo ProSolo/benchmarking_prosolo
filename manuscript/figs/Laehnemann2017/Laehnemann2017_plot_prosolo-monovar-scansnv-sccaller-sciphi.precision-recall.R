@@ -241,21 +241,25 @@ ggplot(avg_per_software_and_parameter %>%
   coord_cartesian( ylim = c(0,1), xlim = c(0,1) ) +
   geom_line( aes( color = software, linetype = software ) ) +
   scale_linetype_manual(
-    values = linetype_pal
+    values = linetype_pal,
+    labels = software_labels
     ) +
   geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
+  scale_colour_manual(
+    values = software_pal,
+    labels = software_labels
+    ) +
+  scale_fill_manual(
+    values = software_pal,
+    labels = software_labels
+    ) +
   scale_shape_manual(
     values = shape_pal
     ) +
-  scale_colour_manual(
-    values = software_pal
-    ) +
-  scale_fill_manual(
-    values = software_pal
-    ) +
   guides(
-    linetype = guide_legend( keywidth = 3),
-    shape = guide_legend( title = "threshold used") ) +
+    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
+    shape = guide_legend( title = "threshold used")
+    ) +
   theme_bw(base_size=24, base_family="Lato")  +
   labs(x = "average recall",
        y = "average precision",
@@ -271,6 +275,7 @@ ggplot(avg_per_software_and_parameter %>%
   geom_line( aes( color = software, linetype = software ) ) +
   scale_linetype_manual(
     values = linetype_pal,
+    labels = software_labels,
     guide = "legend"
     ) +
   geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
@@ -280,14 +285,16 @@ ggplot(avg_per_software_and_parameter %>%
     ) +
   scale_colour_manual(
     guide = "legend",
+    labels = software_labels,
     values = software_pal
     ) +
   scale_fill_manual(
     guide = "legend",
+    labels = software_labels,
     values = software_pal
     ) +
   guides( 
-    linetype = guide_legend( keywidth = 3),
+    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
     shape = guide_legend( title = "threshold used")
     ) +
   theme_bw(base_size=24, base_family="Lato") +

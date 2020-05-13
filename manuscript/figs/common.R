@@ -82,6 +82,18 @@ software_pal <- c(
   "SCIPhI sensitive" = light_reddish_Purple
 )
 
+software_labels <- c(
+   "MonoVar default",
+   "MonoVar no consensus",
+   "ProSolo default",
+   bquote('ProSolo imputation'^-B),
+   "SCAN-SNV sensitive",
+   "SCcaller default dbsnp",
+   "SCcaller sensitive dbsnp",
+   "SCIPhI default",
+   bquote('SCIPhI sensitive'^-B)
+)
+
 shape_pal <-
   c("1e-06" = 17,
     "1e-05" = 4,

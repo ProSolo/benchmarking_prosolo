@@ -12,8 +12,8 @@
 
 \usepackage{natbib}
 
-%\usepackage[left]{lineno}
-%\linenumbers
+\usepackage[left]{lineno}
+\linenumbers
 
 \usepackage{setspace}
 \doublespacing
@@ -316,7 +316,7 @@ Let further $M_{R_i}[g]$ be the Phred alignment quality score\footnote{
  As before, we will omit the position $g$ from notation from this point on.
 } provided by the aligner.
 We now define $Z_i[g]$ ($i\in\{1,\dots,l\}$) to be the collection of the observable variables for the alignment of one of $l$ reads $R_i \in \cR$ to a genome position $g$.
-Omitting index $g$, this is the vector ${Z_i = \langle S_{R_i}, Q_{R_i}, M_{R_i} \rangle}$ and drawing on this information, we now introduce hyperparameters analogously to the model for tumor-normal variant calling as outlined by \cite{koster_enhancing_2019} for Varlociraptor.
+Omitting index $g$, this is the vector ${Z_i = \langle S_{R_i}, Q_{R_i}, M_{R_i} \rangle}$ and drawing on this information, we now introduce hyperparameters analogously to the model for tumor-normal variant calling as outlined by \cite{koster_varlociraptor_2020} for Varlociraptor.
 These will be the latent variables $\omega_i\in\{0,1\}$ to model correct placement of an alignment ($\omega_i=1$ if correct and $\omega_i=0$ otherwise) and $\xi_i\in\{0,1\}$ to specify whether an alignment $Z_i$ is associated with the alternative nucleotide ($\xi_i=1$) or not ($\xi_i=0$).
 Taken together, they give three cases
 
@@ -381,7 +381,7 @@ With ${x \in \{A,C,G,T\}}$ the alternative nucleotide under inspection, we can t
 \subsection{Single cell latent variable model} \label{sec:sc-model}
 
 By applying the Chapman-Kolmogorov equation with our binary hyperparameters to the single cell case\footnote{
- We will only be looking at single cell samples in the following, as the case of $\rho_b = \theta_b$ is the simpler one and analogous without the whole genome amplification considerations. Please also refer to the tumor and normal sample derivations in \cite{koster_enhancing_2019}, but note that we need no purity parameter, here.
+ We will only be looking at single cell samples in the following, as the case of $\rho_b = \theta_b$ is the simpler one and analogous without the whole genome amplification considerations. Please also refer to the tumor and normal sample derivations in \cite{koster_varlociraptor_2020}, but note that we need no purity parameter, here.
 }, we get
 
 \begin{equation}
@@ -604,7 +604,7 @@ This posterior probability is the one used for the main benchmarking of ProSolo 
 
 ProSolo is an easy-to-use command-line tool (following usability standards \citep{taschuk_ten_2017}) and its source code is available at \url{https://github.com/prosolo/prosolo}, including instructions for an easy installation (via Bioconda \citep{gruning_bioconda:_2018}). 
 The main contribution in terms of software that ProSolo's development provided, is the implementation of its comprehensive statistical model that jointly looks at a single-cell and a bulk sample.
-This was implemented as a part of Varlociraptor, a variant calling library implemented in Rust \citep{koster_enhancing_2019}.
+This was implemented as a part of Varlociraptor, a variant calling library implemented in Rust \citep{koster_varlociraptor_2020}.
 Varlociraptor already makes use of all available sources of information regarding biases of normal sequencing data, induced by ambiguous alignments and sequencing errors, but had to be extended to accommodate this type of sample combination and to allow for accounting for amplification bias.
 Because Varlociraptor had originally been specializing in indels and structural variants, implementing ProSolo also meant further investment in expanding Varlociraptor's capabilities for basic SNV analysis and required some improvements in the handling of sequencing alignment data in the upstream library rust-htslib \citep{rust-htslib_htslib_nodate}, a Rust wrapper around htslib \citep{htslib_c_nodate}. 
 Further, we optimized Varlociraptor's calculations wherever possible, for example by reducing the number of redundant likelihood calculations and by caching frequently reused values.
@@ -614,7 +614,7 @@ And finally, numerical issues required an addition to the upstream library rust-
 
 Last---but not least---ProSolo can control the false discovery rate of any set of single cell events that a user defines.
 At any scale of high throughput sequencing data (from targeted panels over whole exome sequencing to whole genome sequencing), we generate a large amount of event calls and thus have to control for false discoveries, e.g.~by controlling the false discovery rate \citep{benjamini_controlling_1995}.
-Using Varlociraptor's functionality \citep{koster_enhancing_2019}, we can estimate thresholds on our posterior probabilities based on the approach described by \cite{muller_optimal_2004,muller_fdr_2006}.
+Using Varlociraptor's functionality \citep{koster_varlociraptor_2020}, we can estimate thresholds on our posterior probabilities based on the approach described by \cite{muller_optimal_2004,muller_fdr_2006}.
 For ProSolo, we extended Varlociraptor's capabilities from estimating such thresholds for the posterior probability of a single event to estimating thresholds for any combination of the above defined events.
 For example, to control the false discovery rate for allele dropout events, we jointly obtain a threshold for the combination of the two ADO events in Figure~\ref{fig:prosolo_alt-calling}D.
 Or, to control the false discovery rate in identifying the presence of an alternative allele, we jointly obtain a threshold for the combination of all the respective events in Equation \ref{eq:alt-posterior-prob}. 
@@ -769,7 +769,8 @@ Calculations of $p$recision and $r$ecall were based on true positives (TP, alter
  \caption{
   Global view of the precision-recall plots for alternative allele calling across different software modes and filtering thresholds (for zoomed in view on the most interesting areas of the plot, see main manuscript Figure~\ref{fig:alt-calling_prec-rec}).
   \textbf{A} Precision and recall average of two whole genome sequenced single cells IL-11 and IL-12 against their kindred clone IL-1c as ground truth genotypes.
-  \textbf{B} Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.\newline \footnotesize
+  \textbf{B} Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.\newline 
+  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset in panel B.\newline \footnotesize
   Thresholds used were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
@@ -787,17 +788,17 @@ Calculations of $p$recision and $r$ecall were based on true positives (TP, alter
 
 The whole genome cell line dataset (Figure~\ref{fig:datasets}A) seems much less challenging than the other dataset: all methods achieve high precision in alternative allele calling (Figures~\ref{fig:alt-calling_prec-rec_global}A and \ref{fig:alt-calling_prec-rec}A), at recall rates of 45\% and higher. 
 In comparison with all other tools, ProSolo achieves the most striking increases in recall of nearly 10\%.
-For example, for a precision above 99\%, its maximum recall is 76.6\% compared to 70.5\% for MonoVar, 68.7\% for SCIPhI and 61.0\% for SCcaller.
-SCAN-SNV achieves up to 99.2\% precision, but only 0.01\% recall.
+For example, for a precision above .99, its maximum recall is .766 compared to .705 for MonoVar, .687 for SCIPhI and .610 for SCcaller.
+SCAN-SNV achieves up to .992 precision, but only .0001 recall.
 This can be explained by it aiming at somatic mutations, while the vast majority of SNVs in a genome will be germline variants.
 
 Although a relative increase in recall of about 10\% at utmost precision is certainly remarkable, ProSolo demonstrates its power on the second (whole exome) dataset.
 This dataset is considerably more challenging than the first one.
 See Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B for respective results.
-For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above 99\%, with ProSolo reaching a 20\% increase of recall to 17.6\%, compared to SCIPhI's 14.6\%, and SCcaller with 7.2\% (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
-In comparison, MonoVar achieved a maximum precision of only 96.29\%. However, this was at a much higher recall (14.13\%) than for example SCcaller (9.55\% at a precision of 97.23\%).
+For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above .99, with ProSolo reaching a 20\% increase of recall to .176, compared to SCIPhI's .146, and SCcaller with .072 (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
+In comparison, MonoVar achieved a maximum precision of only .962. However, this was at a much higher recall (.141) than for example SCcaller (.095 at a precision of .972).
 SCcaller's decreased recall on this dataset might be due to its estimation of local allelic bias by also taking biases at neighboring sites into account---in whole exome data the number of neighboring sites available for this estimation will be limited and might lead to less reliable estimates.
-On this dataset, SCAN-SNV's recall increased to 0.16\% at a decreased maximum precision of 89.7\%.
+On this dataset, SCAN-SNV's recall increased to .0016\% at a decreased maximum precision of .897.
 Most likely, this decreased precision is an artefact of using the germline genotype as ground truth.
 At the sites with somatic mutations in single cells, which SCAN-SNV focuses on, this ground truth will instead contain the germline genotype and will incorrectly classify alternative alleles as false positives.
 Due to this effect, we also expect the calculated precision of all the other tools to be an underestimate, but against the backdrop of large numbers of sites where the single cells harbour the germline genotype, the effect will be much smaller.
@@ -911,7 +912,7 @@ One important difference in the ground truth used here, compared to the ground t
 For this dataset, the basic ground truth was generated using GATK HaplotypeCaller and variant quality score recalibration.
 However, this recalibration optimises on the presence (heterozgyous or homozygous alternative) vs. the absence (homozygous reference) of an alternative allele and filtered genotypes will not reliably distinguish between heterozygous genotypes and homozygous alternative genotypes.
 We thus excluded all sites where the genotype quality ({\ttfamily GQ} FORMAT field) is below a PHRED score of 30.
-This corresponds to a 0.1\% probability of having erroneously called the current genotype over the second most likely genotype, and thus also filters for a clear distinguishability between heterozygous and homozygous alternative genotypes.
+This corresponds to a 0.001 probability of having erroneously called the current genotype over the second most likely genotype, and thus also filters for a clear distinguishability between heterozygous and homozygous alternative genotypes.
 This is important both for identifying allele dropout and for identifying exact genotypes as in Section~\ref{sec:suppl-gt-calling}.
 
 The first validation of these rates from within ProSolo is to genotype all the ground truth heterozygous sites with ProSolo.
@@ -1029,7 +1030,7 @@ Also, for the whole exome data (right panels in Figures~\ref{fig:gt-calling-true
 
 \subsection{Further Software and Resources used}
 
-All analysis code for both the main processing pipeline and the manuscript figures is available at: \url{https://github.com/prosolo/benchmarking_prosolo}.
+All analysis code for both the main processing pipeline and the manuscript figures is available at: \url{https://github.com/prosolo/benchmarking_prosolo} (or as preserved by Zenodo at: \url{https://doi.org/10.5281/zenodo.3769116}).
 An overview and citations of software and resources beyond those mentioned in the methods section are provided in Table~\ref{tab:software-overview}.
 
 \begin{center}

@@ -164,24 +164,24 @@ THE ABSTRACT\vskip12pt}\let\go\relax\fi
 \vskip10pt
 {\raggedright\sffamily\fontsize{12}{16}\selectfont  \@author\par}
 \vskip18pt%
-{%
-\noindent
-{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\color{color1}\large\sffamily\textbf{ABSTRACT}}}
-}%
-\vskip10pt
-{%
-\noindent
-\colorbox{color2}{%
-\parbox{\dimexpr\linewidth-2\fboxsep\relax}{%
-\sffamily\small\textbf\\\theabstract
-}%
-}%
-% \vskip18pt%
-% \noindent
-% \parbox{\dimexpr\linewidth-2\fboxsep\relax}{%
-% {\color{color1}\keywordname\hspace*{1em}} \@keywords%
+%{%
+%\noindent
+%{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\color{color1}\large\sffamily\textbf{ABSTRACT}}}
 %}%
-}%
+%\vskip10pt
+%{%
+%\noindent
+%\colorbox{color2}{%
+%\parbox{\dimexpr\linewidth-2\fboxsep\relax}{%
+%\sffamily\small\textbf\\\theabstract
+%}%
+%}%
+%% \vskip18pt%
+%% \noindent
+%% \parbox{\dimexpr\linewidth-2\fboxsep\relax}{%
+%% {\color{color1}\keywordname\hspace*{1em}} \@keywords%
+%%}%
+%}%
 \vskip25pt%
 }%
 }%

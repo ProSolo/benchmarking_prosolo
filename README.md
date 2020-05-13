@@ -1,3 +1,6 @@
+
+[![DOI](https://zenodo.org/badge/243326893.svg)](https://zenodo.org/badge/latestdoi/243326893)
+
 # Benchmarking ProSolo
 
 This repository contains additional information regarding the ProSolo benchmarking paper "ProSolo: Accurate Variant Calling from Single Cell DNA Sequencing Data". 

@@ -145,6 +145,10 @@ batches:
   - PAG10
   bulk:
   - PNG
+  - PNG_70-percent_seed-67
+  - PNG_40-percent_seed-54
+  - PNG_10-percent_seed-32
+  - PNG_empty
   candidates:
   - PAG1
   - PAG2

@@ -68,7 +68,7 @@ rule all:
         [ "preprocessing/runs/fastqc/" + run + read +
             ".cutadaptIllumina_fastqc.zip" for run in config["runs"].keys() for
             read in config["infix"][ config["runs"][run] ] ],
-#        ### request only the cutadap Illumina adapter trimming results without FastQC check
+#        ### request only the cutadapt Illumina adapter trimming results without FastQC check
 #        [ "preprocessing/runs/" + run + read + ".cutadaptIllumina.fastq.gz" for
 #            run in config["runs"].keys() for read in
 #            config["infix"][ config["runs"][run] ] ],
@@ -82,10 +82,10 @@ rule all:
         ### another FastQC run after all preprocessing steps
         [ "preprocessing/runs/fastqc/" + run + tag + ".pp_fastqc.zip" for run in
             config["runs"].keys() for tag in _create_full_tag(run)],
-        ### summarise FastQC kmers after all preprocessing steps
-        [ "preprocessing/runs/" + config["project_name"] + ".pp.forward.kmers" ],
-        [ "preprocessing/runs/" + config["project_name"] + ".pp.reverse.kmers" ],
-        [ "preprocessing/runs/" + config["project_name"] + ".pp.singleton.kmers" ],
+#        ### summarise FastQC kmers after all preprocessing steps -- this can be done as extra QC and for adapter searching
+#        [ "preprocessing/runs/" + config["project_name"] + ".pp.forward.kmers" ],
+#        [ "preprocessing/runs/" + config["project_name"] + ".pp.reverse.kmers" ],
+#        [ "preprocessing/runs/" + config["project_name"] + ".pp.singleton.kmers" ],
 #        [ "mapping/hg19/runs/" + run + tag + ".bwamem.bam" for run in
 #            config["runs"].keys() for tag in _create_tag(run)],
 #        [ "mapping/hg19/runs/" + run + tag + ".map.bam" for run in
@@ -97,30 +97,30 @@ rule all:
 #        ### BAM output after per run processing (bpr)
 #        [ "mapping/hg19/runs/" + run + ".bpr.sorted.bam"
 #                for run in config["runs"].keys() ],
-        [ "mapping/hg19/runs/" + config["project_name"] + ".MarkDupMetrics.tsv" ],
+#        [ "mapping/hg19/runs/" + config["project_name"] + ".MarkDupMetrics.tsv" ],
 #        ### BAM output after per sample processing (bps), one sample can consist of multiple runs
 #        [ "mapping/hg19/samples/" + sample + ".bps.sorted.bam"
 #                for sample in config["samples"].keys() ],
-        [ "mapping/hg19/samples/" + config["project_name"] +
-             ".bps.sorted.SureSelectHumanAllExonV5plusUTR.HsMetrics.tsv" ],
+#        [ "mapping/hg19/samples/" + config["project_name"] +
+#             ".bps.sorted.SureSelectHumanAllExonV5plusUTR.HsMetrics.tsv" ],
         ### BAM coverage dist after sample merging
         [ "mapping/hg19/samples/" + sample + ".bps.SureSelectHumanAllExonV5plusUTR.target.mosdepth.global.dist.txt"
                 for sample in config["samples"].keys() ],
 #        ### GVCF output after initial variant calling with GATK HaplotypeCaller (per sample per chr)
 #        [ tmp + "/variant_calling/hg19/" + sample + "." + chrom + ".hc.g.vcf" for
 #            sample in config["samples"].keys() for chrom in chrlist ],
-        ### VCF output after (joint) variant calling with GATK GenotypeGVCFs and merging all chromosomes (per project)
-##        [ "variant_calling/hg19/" + sample + ".bcftools.bcf" 
-##                for sample in config["samples"].keys() ],
-        ### VCF output after variant calling, e.g. with GATK HaplotypeCaller
+#        ### VCF output after (joint) variant calling with GATK GenotypeGVCFs and merging all chromosomes (per project)
+#        [ "variant_calling/hg19/" + sample + ".bcftools.bcf" 
+#                for sample in config["samples"].keys() ],
+#        ### VCF output after variant calling, e.g. with GATK HaplotypeCaller
 #        [ "variant_calling/hg19/" + sample + ".vc.bcf"
 #                for sample in config["samples"].keys() ],
-        ### candidates called with bcftools
-###         [ "variant_calling/hg19/" + config["project_name"] + ".candidates.bcf" ],
-###         ### BCF output after ProSolo against the bulk background
-##        [ "variant_calling/hg19/" + single_cell + "." + bulk + ".prosolo.bcf"
-##                 for single_cell in config["batches"]["single_cells"]
-##                 for bulk in config["batches"]["bulk"] ],
+#        ### candidates called with bcftools
+#         [ "variant_calling/hg19/" + config["project_name"] + ".candidates.bcf" ],
+#         ### BCF output after ProSolo against the bulk background
+#        [ "variant_calling/hg19/" + single_cell + "." + bulk + ".prosolo.bcf"
+#                 for single_cell in config["batches"]["single_cells"]
+#                 for bulk in config["batches"]["bulk"] ],
 #         [ "variant_calling/hg19/PAG9.PNG.prosolo.bcf"],
         [ "variant_calling/hg19/" + single_cell + 
             ".CCS_1_W.ground_truth.het_snps_only.allele_dropout_rate.tsv"
@@ -134,7 +134,7 @@ rule all:
             ".alt_sites_only.fdr_" + fdr + "_alt-presence.prosolo" + min_sc_cov + ".positives_negatives.ML_set.tsv"
                  for single_cell in config["batches"]["single_cells"]
                  for bulk in config["batches"]["bulk"]
-                 for fdr in [ "0-001", "0-01", "0-02", "0-05", ]
+                 for fdr in [ "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "0-5", "1"]
                  for min_sc_cov in [ "", ".min_sc_cov_1" ]
         ],
         [ "variant_calling/hg19/prosolo/" + single_cell + "." + bulk +
@@ -151,40 +151,48 @@ rule all:
         [ "variant_calling/hg19/prosolo/" + event_set + "-rate/" +
                  single_cell + "." + bulk + ".alt_sites_only.prosolo" +
                  min_sc_cov + ".expected-" + event_set + "-rate.tsv"
-                 for event_set in [ "ado", "error" ]
+                 for event_set in [ "ado" ]
                  for single_cell in config["batches"]["single_cells"]
                  for bulk in config["batches"]["bulk"]
-                 for min_sc_cov in [ "", ".min_sc_cov_1" ]
+                 for min_sc_cov in [ ".min_sc_cov_1" ]
         ],
         [ "variant_calling/hg19/prosolo/ado-rate/" + single_cell + "." + bulk +
                  ".alt_sites_only.prosolo.min_sc_cov_1.ground_truth_hets_only.expected-ado-rate.tsv"
                  for single_cell in config["batches"]["single_cells"]
                  for bulk in config["batches"]["bulk"]
-                 for min_sc_cov in [ "", ".min_sc_cov_1" ]
         ],
-        [ "variant_calling/hg19/prosolo/error-rate/" + single_cell + "." + bulk +
-            ".alt_sites_only.prosolo" + min_sc_cov + ".amp-err-probs-" + plots + ".svg"
-                 for single_cell in config["batches"]["single_cells"]
-                 for bulk in config["batches"]["bulk"]
-                 for min_sc_cov in [ "", ".min_sc_cov_1" ]
-                 for plots in ["histogram", "ecdf" ] ],
-        [ "variant_calling/hg19/prosolo/ado-rate/" + single_cell + "." + bulk +
-            ".alt_sites_only.prosolo" + min_sc_cov + ".ado-probs-" + plots + ".svg"
-                 for single_cell in config["batches"]["single_cells"]
-                 for bulk in config["batches"]["bulk"]
-                 for min_sc_cov in [ "", ".min_sc_cov_1" ]
-                 for plots in ["histogram", "ecdf" ] ],
-####        [ "variant_calling/hg19/prosolo/" + single_cell + "." + bulk + ".prosolo.alt-presence-fdr_" + fdr + ".positives_negatives.ML_set.tsv"
-####                for single_cell in config["batches"]["single_cells"]
-####                for bulk in config["batches"]["bulk"]
-####                for fdr in [ "0-000001", "0-000005", "0-00001", "0-00005", "0-0001", "0-0005", "0-001", "0-005", "0-01", "0-02", "0-03", "0-04", "0-05", "0-08", "0-1", "0-15", "1" ] ],
-####        ### BCF output after joint MonoVar calling
-#####        [ "variant_calling/hg19/single_cells.monovar.bcf" ],
-        ### TSV output after joint SciPhi calling, only containing called genotypes per cell
-        [ "variant_calling/hg19/sciphi/" + run + "/" + single_cell + ".single_cells." + extra_options + "sciphi.positives_negatives.tsv"
+#        [ "variant_calling/hg19/prosolo/ado-rate/" + single_cell + "." + bulk +
+#            ".alt_sites_only.prosolo" + min_sc_cov + ".ado-probs-" + plots + ".svg"
+#                 for single_cell in config["batches"]["single_cells"]
+#                 for bulk in config["batches"]["bulk"]
+#                 for min_sc_cov in [ ".min_sc_cov_1" ]
+#                 for plots in ["histogram", "ecdf" ] ],
+#        [ "variant_calling/hg19/prosolo/" + single_cell + "." + bulk + ".prosolo.alt-presence-fdr_" + fdr + ".positives_negatives.ML_set.tsv"
+#                for single_cell in config["batches"]["single_cells"]
+#                for bulk in config["batches"]["bulk"]
+#                for fdr in [ "0-000001", "0-000005", "0-00001", "0-00005", "0-0001", "0-0005", "0-001", "0-005", "0-01", "0-02", "0-03", "0-04", "0-05", "0-08", "0-1", "0-15", "1" ] ],
+#        ### BCF output after joint MonoVar calling
+#        [ "variant_calling/hg19/single_cells.monovar.bcf" ],
+##        ### positives/negatives TSV output after joint scVILP calling, only containing called genotypes per cell
+##        ### THIS DID NOT RUN THROUGH, BUT ERRORED WITH AN OUT OF MEMORY ERROR BY GUROBI
+##        [ "variant_calling/hg19/scvilp/" + mode + "/" + single_cell + ".single_cells." + mode + ".scvilp.positives_negatives.tsv"
+##                for mode in ["sensitive", "default"]
+##                for mode in ["default"]
+##                for single_cell in config["batches"]["single_cells"]
+##        ],
+#        ### TSV output after joint SCIPhI calling, only containing positive and negative calls per cell
+#        [ "variant_calling/hg19/sciphi/" + run + "/" + single_cell + ".single_cells." + extra_options + "sciphi.positives_negatives.tsv"
+#                for run in ["7"]
+#                for single_cell in config["batches"]["single_cells"]
+#                for extra_options in ["", "400000_iterations.sensitive."]
+#                for extra_options in [ "80000_iterations.sensitive."]
+#        ],
+        ### TSV output after joint SCIPhI calling, only containing positive and negative calls per cell after ProSolo FDR
+        [ "variant_calling/hg19/sciphi/" + run + "/fdr_alt-presence/" + single_cell + ".single_cells." + extra_options + "sciphi.alt_prob.fdr_" + fdr + "_alt-presence.alt_calls.positives_negatives.ML_set.tsv"
                 for run in ["7"]
                 for single_cell in config["batches"]["single_cells"]
-                for extra_options in ["default.", "400000_iterations.sensitive."]
+                for extra_options in ["", "400000_iterations.sensitive."]
+                for fdr in [ "0-000001", "0-000005", "0-00001", "0-00005", "0-0001", "0-0005", "0-001", "0-005", "0-01", "0-02", "0-03", "0-04", "0-05", "0-08", "0-1", "0-2", "0-5", "1" ]
         ],
         ### TSV output after joint MonoVar calling, only containing called genotypes per cell
         [ "variant_calling/hg19/monovar/" + single_cell + ".single_cells." + threshold + "." + consensus + ".monovar.positives_negatives.tsv"
@@ -196,27 +204,10 @@ rule all:
                 for single_cell in config["batches"]["single_cells"]
                 for threshold in ["1"]
                 for consensus in ["c0"] ],
-                    ### sccaller example intermediate outputs for one sample
-##        [ tmp + "/variant_calling/hg19/PNG.chr20.gatk.vcf" ],
-##        [ tmp + "/variant_calling/hg19/PNG.chr20.gatk_hets.vcf" ],
-##        [ tmp + "/variant_calling/hg19/PAG5.chr20.hsnp.bed" ],
-##        [ tmp + "/variant_calling/hg19/PAG5.chr20.varcall.bed" ],
-#        [ "variant_calling/hg19/PAG5.varcall.cutoff.bed" ],
         [ "variant_calling/hg19/sccaller/" + sample + mode + ".sccaller.varcall.cutoff.fil-amp-err_alpha_" + alpha + ".positives_negatives.tsv"
                 for sample in config["batches"]["single_cells"]
                 for mode in [ "", ".dbsnp", ".low-cov", ".dbsnp.low-cov" ]
                 for alpha in [ "0-01", "0-05", "1-0" ] ],
-#        ### VCF output after variant recalibration with GATK
-#        [ "variant_calling/hg19/" + sample + ".vc.snp_recalibrated.indel_recalibrated.vcf"
-#                for sample in config["samples"].keys() ],
-#        ### VCF output after variant recalibration with GATK
-#        [ "variant_calling/hg19/" + sample + ".vc.prosolo.vcf"
-#                for sample in config["samples"].keys() ],
-##        [ "variant_calling/hg19/" + config["project_name"] + ".bps.gatk.snp_recalibrated.indel_recalibrated.vcf" ],
-#        ### per sample human whole exome statistics for the SureSelectHumanAllExonV5plusUTR probe set
-#        [ "mapping/hg19/samples/" + sample + 
-#                ".bps.sorted.SureSelectHumanAllExonV5plusUTR.hs_metrics" 
-#                for sample in config["samples"].keys() ],
 
 # can be used for setting a default memory usage per thread
 for r in workflow.rules:

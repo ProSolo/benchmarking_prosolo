@@ -5,7 +5,7 @@ Accurate Variant Calling from Single Cell DNA Sequencing Data".
 
 DISCLAIMER: These analysis pipelines have grown over the years, and I cannot recommend them
 as a model for new pipelines. For some ready-to-use workflows and good templates for new
-workflows, the [Snakemake Workflow project](https://github.com/snakemake-workflows/docs).
+workflows, see the [Snakemake Workflow project](https://github.com/snakemake-workflows/docs).
 
 
 ## General setup

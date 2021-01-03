@@ -13,7 +13,7 @@ folders:
   # The folder where your data can be found, it should be an absolute path.
   data: /path/to/Dong2017/data
   # The tmp folder should be set for your SERVER ENVIRONMENT
-  tmp: /net/scratch/nobackup/dlaehnemann/tmp
+  tmp: /path/to/tmp
 ### REFERENCE DATASETS
 references:
   # Where to find the reference genome in your SERVER ENVIRONMENT

@@ -1,0 +1,29 @@
+name: Benchmarking_ProSolo
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - sra-tools =2.8
+  - fastqc ==0.11.5
+  - trimmomatic ==0.36
+  - bwa ==0.7.15
+  - famseq ==1.0.3
+  - gatk ==3.6
+  - openjdk ==8.0.265
+  - polymutt ==0.18
+  - python ==3.6
+  - beagle ==4.0_06Jun17
+  - picard ==2.9.2
+  - bcftools ==1.6.0
+  - cutadapt ==1.14
+  - htslib ==1.4.1
+  - prosolo ==0.6.1
+  - samtools ==1.4.1
+  - conda
+  - mamba
+  - r-tidyverse =1.1.1
+  - r-scales =1.0.0
+  - r-argparser
+  - r-rcolorbrewer
+  - snakemake =5.30

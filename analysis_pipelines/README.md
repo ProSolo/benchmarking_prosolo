@@ -12,13 +12,20 @@ workflows, the [Snakemake Workflow project](https://github.com/snakemake-workflo
 
 To run any of this, you will have to have a (bio-)conda installation present. I recommend
 following the [bioconda installation instructions](https://bioconda.github.io/user/install.html)
+and then adding in mamba for faster dependency resolution:
+
+    conda install mamba
 
 Once this is set up, you need to create an environment that contains `snakemake` and some other
 (older) dependencies, using the environment specification provided in this folder:
 
-    conda create --name Benchmarking_ProSolo --file Benchmarking_ProSolo.explicit.txt
+    mamba env create --file Benchmarking_ProSolo_minimal.yml
 
-Once you have this environment, the three datasets should be run through their respective
+(An older version of this specification, which pins all packages and thus makes dependency
+resolution harder or even impossible, is also available for documentation:
+`Benchmarking_ProSolo.explicit.txt`.)
+
+Once you have this environment, the four datasets should be run through their respective
 pipelines in the following order:
 
 1. `Dong2017`: Two whole genome sequenced single cells and a corresponding bulk, with the ground
@@ -29,8 +36,8 @@ pipelines in the following order:
    sequencing samples, with ground truth clonal and subclonal variants provided through targeted
    resequencing validation in the original publication (Supplementary Tables 6 and 7).
 
-For each dataset (`Dong2017`, `Hoell2014, `Laehnemann2017`), a separate `Snakefile`, `config.yaml`
-and `pipeline.wrapper.bash` exist in the respective subfolders. You will have to adjust:
+For each dataset (`Dong2017`, `Hoell2014, `Laehnemann2017`, `Wang2014`), a separate `Snakefile`,
+`config.yaml` and `pipeline.wrapper.bash` exist in the respective subfolders. You will have to adjust:
 
 ### `config.yaml`
 
@@ -54,7 +61,7 @@ you will have to get:
 3. `Laehnemann2017`: From the same [EGA Dataset EGAD00001005929](https://www.ebi.ac.uk/ega/datasets/EGAD00001005929)
    further download samples `EGAN00002446895, EGAN00002446896, EGAN00002446897, EGAN00002446898, EGAN00002446899, EGAN00002446900`.
 4. `Wang2014`: From [SRA Bioproject PRJNA168068](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=PRJNA168068&f=sample_name_s%3An%3Atnbc%3Blibraryselection_s%3An%3Amda%2Cpcr%3Ac&o=acc_s%3Aa&s=SRR1163035,SRR1163012,SRR1163013,SRR1163019,SRR1163026,SRR1163027,SRR1163034,SRR1163043,SRR1163053,SRR1163070,SRR1163074,SRR1163083,SRR1163084,SRR1163091,SRR1163095,SRR1163148,SRR1163149,SRR1163150,SRR1163151,SRR1163152,SRR1163153,SRR1163154,SRR1163155,SRR1163156,SRR1163157,SRR1163158,SRR1163159,SRR1163160,SRR1163161,SRR1163162,SRR1163163,SRR1163164,SRR1298936,SRR1163508#)
-   download sample `SRR1163035,SRR1163012,SRR1163013,SRR1163019,SRR1163026,SRR1163027,SRR1163034,SRR1163043,SRR1163053,SRR1163070,SRR1163074,SRR1163083,SRR1163084,SRR1163091,SRR1163095,SRR1163148,SRR1163149,SRR1163150,SRR1163151,SRR1163152,SRR1163153,SRR1163154,SRR1163155,SRR1163156,SRR1163157,SRR1163158,SRR1163159,SRR1163160,SRR1163161,SRR1163162,SRR1163163,SRR1163164,SRR1298936,SRR1163508`.
+   download samples `SRR1163035,SRR1163012,SRR1163013,SRR1163019,SRR1163026,SRR1163027,SRR1163034,SRR1163043,SRR1163053,SRR1163070,SRR1163074,SRR1163083,SRR1163084,SRR1163091,SRR1163095,SRR1163148,SRR1163149,SRR1163150,SRR1163151,SRR1163152,SRR1163153,SRR1163154,SRR1163155,SRR1163156,SRR1163157,SRR1163158,SRR1163159,SRR1163160,SRR1163161,SRR1163162,SRR1163163,SRR1163164,SRR1298936,SRR1163508`.
 
 #### references
 
@@ -109,7 +116,8 @@ Snakemake pipeline. See the
 [SCAN-SNV documentation](https://github.com/parklab/scan-snv/blob/6df4c19d6cd3cd0b796bf858eea874f79df34ad3/README.md)
 for details. This setup made it impossible to integrate SCAN-SNV into the existing
 pipelines and SCAN-SNV had to be installed into its own environment and run separately. For
-the installation, please follow the instructions linked above.
+the installation, please follow the instructions linked above and possibly modify them by
+considering the info provided in [SCAN-SNV issue #4](https://github.com/parklab/scan-snv/issues/4).
 
 For the exact `config.yaml` and `Snakefile` used, see the subdirectories of `SCAN-SNV/`. As
 we tried to increase SCAN-SNV's sensitivity, we had to change the `Snakefile`. For `scansnv`
@@ -121,6 +129,9 @@ following the above install instructions. In particular, you will have to:
 
 Sorry for the inconvenience -- this is the only way we found to make this work. Once this is
 in place, check `SCAN-SNV/Dong2017/run_scansnv.bash` for the exact command that was run for
-that dataset and run the `Laehneman2017` dataset accordingly. Please note, that the respective
-main pipeline for that dataset will have to have run up to the point where the necessary BAM
-files have been generated.
+that dataset and run the `Laehneman2017` datasets accordingly. Please note, that
+the respective main pipeline for that dataset will have to have run up to the point where the
+necessary BAM files have been generated. Please also note, that the recent installation
+problems seem to have created dependency issues for using `r-tibble` in the analysis of
+SCAN-SNV results. We were thus unable to process SCAN-SNV results systematically for the
+`Wang2014` dataset and excluded it from this analysis. 

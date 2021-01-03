@@ -1,0 +1,96 @@
+********************************** PerfectPhy **********************************
+* Written by Michael Coulombe                                                  *
+* Original sprop3 written by Dan Gusfield                                      *
+********************************************************************************
+
+Quick Guide:
+    Usage Options:
+    $ ./perfectphy -h
+    
+    Test if matrix.txt has a perfect phylogeny:
+    $ ./perfectphy -f matrix.txt
+    
+    Print the constructed perfect phylogeny in Newick tree format, if it exists:
+    $ ./perfectphy -f matrix.txt -newick
+    
+    Test if there is a unique minimal perfect phylogeny:
+    $ ./perfectphy -f matrix.txt -unique
+    
+    Enumerate all minimal perfect phylogenies, using the DAG representation:
+    $ ./perfectphy -f matrix.txt -enum output_dag.txt
+
+
+Compiling with make and g++:
+    $ cd src
+    $ make
+
+Compiling the program on other platforms:
+    Compile src/sprop4.cpp using a C++ compiler (C++11 support not required).
+
+Input matrix file format (whitespace delimited):
+    [Integer Identifier]
+    [n = Number of Taxa/Rows] [m = Number of Characters/Columns]
+    [n by m integer matrix in row-major order]
+    
+    If a character has k observed states, then the numbers in the corresponding
+    column must cover the entire interval [0, k).
+
+Examples:
+    $ echo "0 2 2 0 0 0 1" | ./perfectphy -newick
+    1 The data DOES have a perfect phylogeny
+    ('0 1','0 0')
+
+    $ echo "0 4 2 0 0 0 1 1 0 1 1" | ./perfectphy -newick
+    0 The data does NOT have a perfect phylogeny
+
+
+Tools:
+
+charremoval.py - A Python (2.7) script which takes an input file and runs
+perfectphy on successively smaller subsets of the characters/columns of the data
+until a perfect phylogeny is found.
+
+missingdata.cpp - Source code for a C++ program which facilitates input files
+which have missing data entries (-1). With the -fill option, this program will
+replace every instance of -1 in a character/column with a new, unique state.
+
+convert.cpp, deconvert.cpp - Source code for C++ programs which allow for the
+use of Phylip sequence format input files. convert.cpp will transform the file
+into the proper input format and can output the character mapping to a separate
+temporary file. With the -dummy flag, a characters can be marked as signifying
+missing data (-1). deconvert.cpp takes a newick tree and undoes the mapping.
+
+Example usage, assuming matrix.txt has a perfect phylogeny:
+    $ ./convert -mapfile temp < matrix.txt > input
+    $ ./perfectphy -newick -f input | tail -1 | ./deconvert -mapfile temp
+
+newicktodot.cpp - Source code for a C++ program which takes a newick tree on
+stdin and writes it to stdout in Graphviz dot format.
+
+
+
+Programs and scripts used in experiments (more detail in experiments/README):
+
+ms - Generates random synthetic binary data.
+
+multextract.pl - a Perl program to extract individual datasets from a file
+created by ms. 
+
+run_tests.py - A Python (2.7) script which generates datasets with ms and runs
+perfectphy on them to measure run time.
+
+run_tests_dagsize.py - A Python (2.7) script which measures the DAG filesize on
+a variety of parameters.
+
+run_tests_md.py - A Python (2.7) script which measures the run time of
+perfectphy on datsets with missing data on a variety of parameters.
+
+run_tests_rc.py - A Python (2.7) script which measures the run time of
+charremoval.py on a variety of parameters.
+
+run_tests_treecount.py - A Python (2.7) script which runs perfectphy on a
+variety of parameters and counts the number of minimal enumerated trees.
+
+run_tests_mintree.py - A Python (2.7) script which runs perfectphy on a variety
+of parameters and compares the size of the tree output by the initial DP with
+the size of the smallest minimal enumerated tree.

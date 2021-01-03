@@ -1,0 +1,76 @@
+************************ PerfectPhy: Experiment Scripts ************************
+* Written by Michael Coulombe                                                  *
+********************************************************************************
+
+This directory includes python scripts used to automate experiments on the
+performance and output of PerfectPhy. The general way to run a script is:
+
+$ python [SCRIPT NAME] [# TRIALS] [# PARALLEL]
+
+Synthetic data is generated using ms. Source code to build ms is available here:
+http://home.uchicago.edu/~rhudson1/source/mksamples.html
+
+The parameters of the data generated is determined by variables in the script.
+To change the parameters, change the initial values of the variables "nmRange"
+and "kRange" in the function "runTests()" (this is the same in all scripts).
+
+The script will run the experiment on all combinations of parameters, and each
+combination will be run TRIALS number of times total by spawning PARALLEL number
+of processes of PerfectPhy at a time.
+
+The following files must be in the same directory as the script when run:
+    perfectphy
+    ms
+    multextract.pl
+
+
+Synthetic Data Generation Programs:
+
+ms - an executable version of Hudson's ms program compiled for Linux. Generates
+random synthetic data. Source code and more information found at:
+http://home.uchicago.edu/~rhudson1/
+
+multextract.pl - a Perl program to extract individual datasets from the file
+created by ms. Each individual dataset is named [k]state[n].[m].[i], where k is
+the number of allowed states, n and m are the dimensions of the problem
+instance, and i is the integer identifier for the instance.
+
+Example commands to generate t instances of (up to) k-state, n by m datasets:
+    $ ./ms [n] [t] -s [m*(k-1)] -r 0.0 5000 > mybigdata
+    $ perl multextract.pl mybigdata 0 [k] > /dev/null
+
+
+The scripts:
+
+run_tests.py - A Python (2.7) script which generates datasets with ms and runs
+perfectphy on them to measure run time. Command line input is the number of
+trials per parameter triplet and the number of trials to run in parallel. Output
+is appended to results.txt and displayed in real-time to stdout.
+
+run_tests_dagsize.py - A Python (2.7) script which measures the DAG filesize on
+a variety of parameters. Output is appended to results_dagsize.txt and displayed
+in real-time to stdout.
+
+run_tests_md.py - A Python (2.7) script which measures the run time of
+perfectphy on datsets with missing data on a variety of parameters. Output is
+appended to results.txt and displayed in real-time to stdout.
+WARNING: This script additionally expects that the file missingdata.cpp in the
+tools directory was compiled and the executable moved to the same directory.
+
+run_tests_rc.py - A Python (2.7) script which measures the run time of
+charremoval.py on a variety of parameters. Output is appended to results.txt and
+displayed in real-time to stdout.
+
+run_tests_treecount.py - A Python (2.7) script which runs perfectphy on a
+variety of parameters and counts the number of minimal enumerated trees. Output
+is appended to results_trees.txt and displayed in real-time to stdout.
+
+run_tests_mintree.py - A Python (2.7) script which runs perfectphy on a variety
+of parameters and compares the size of the tree output by the initial DP with
+the size of the smallest minimal enumerated tree. Output is appended to
+results_mintree.txt and displayed in real-time to stdout.
+WARNING: This script assumes perfectphy was modified to output tree sizes. To
+build perfectphy with the proper output:
+    $ cd src
+    $ make runtestmintree
+    $ mv perfectphy_mintree ../experiments

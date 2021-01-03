@@ -25,6 +25,9 @@ pipelines in the following order:
    truth generation within the same workflow.
 2. `Hoell2014`: The pedigree dataset from which to generate the ground truth for `Laehnemann2017`.
 3. `Laehnemann2017`: Five whole exome sequenced single cells and a corresponding bulk.
+4. `Wang2014`: 16 normal single cells and 16 tumor single cells with two corresponding bulk
+   sequencing samples, with ground truth clonal and subclonal variants provided through targeted
+   resequencing validation in the original publication (Supplementary Tables 6 and 7).
 
 For each dataset (`Dong2017`, `Hoell2014, `Laehnemann2017`), a separate `Snakefile`, `config.yaml`
 and `pipeline.wrapper.bash` exist in the respective subfolders. You will have to adjust:
@@ -50,6 +53,8 @@ you will have to get:
    download samples `EGAN00002446901, EGAN00002446902, EGAN00002446903, EGAN00002446904, EGAN00002446905, EGAN00002446906`.
 3. `Laehnemann2017`: From the same [EGA Dataset EGAD00001005929](https://www.ebi.ac.uk/ega/datasets/EGAD00001005929)
    further download samples `EGAN00002446895, EGAN00002446896, EGAN00002446897, EGAN00002446898, EGAN00002446899, EGAN00002446900`.
+4. `Wang2014`: From [SRA Bioproject PRJNA168068](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=PRJNA168068&f=sample_name_s%3An%3Atnbc%3Blibraryselection_s%3An%3Amda%2Cpcr%3Ac&o=acc_s%3Aa&s=SRR1163035,SRR1163012,SRR1163013,SRR1163019,SRR1163026,SRR1163027,SRR1163034,SRR1163043,SRR1163053,SRR1163070,SRR1163074,SRR1163083,SRR1163084,SRR1163091,SRR1163095,SRR1163148,SRR1163149,SRR1163150,SRR1163151,SRR1163152,SRR1163153,SRR1163154,SRR1163155,SRR1163156,SRR1163157,SRR1163158,SRR1163159,SRR1163160,SRR1163161,SRR1163162,SRR1163163,SRR1163164,SRR1298936,SRR1163508#)
+   download sample `SRR1163035,SRR1163012,SRR1163013,SRR1163019,SRR1163026,SRR1163027,SRR1163034,SRR1163043,SRR1163053,SRR1163070,SRR1163074,SRR1163083,SRR1163084,SRR1163091,SRR1163095,SRR1163148,SRR1163149,SRR1163150,SRR1163151,SRR1163152,SRR1163153,SRR1163154,SRR1163155,SRR1163156,SRR1163157,SRR1163158,SRR1163159,SRR1163160,SRR1163161,SRR1163162,SRR1163163,SRR1163164,SRR1298936,SRR1163508`.
 
 #### references
 
@@ -78,6 +83,9 @@ downloaded reference genome:
 
 Point the `settings`->`capture` entry in the respective `config.yaml`s to the location containing
 the two above created versions of the file.
+
+The same has to be done with a different capture kit for the `Wang2014` dataset.
+The respective BED file is no longer provided by Illumina, but can be found [via this Biostars answer](https://www.biostars.org/p/144554/#144561).
 
 ### `pipeline.wrapper.bash`
 

@@ -14,7 +14,7 @@
    viewBox="0 0 467.2694 308.38788"
    id="svg2"
    version="1.1"
-   inkscape:version="0.92.4 (unknown)"
+   inkscape:version="0.92.5 (2060ec1f9f, 2020-04-08)"
    sodipodi:docname="Event_space.svg">
   <defs
      id="defs4">
@@ -1476,14 +1476,14 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="2.5657623"
-     inkscape:cx="231.6717"
-     inkscape:cy="164.47354"
+     inkscape:zoom="1.9942992"
+     inkscape:cx="281.36102"
+     inkscape:cy="175.56067"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
-     inkscape:window-width="1920"
-     inkscape:window-height="1029"
+     inkscape:window-width="1680"
+     inkscape:window-height="953"
      inkscape:window-x="0"
      inkscape:window-y="27"
      inkscape:window-maximized="1"
@@ -1502,7 +1502,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -1800,25 +1800,25 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:80.00000119%;font-family:lato;-inkscape-font-specification:lato;fill:#ffffff;fill-opacity:1;word-spacing:0px;">alt</tspan></text>
     <text
        id="text5597"
-       y="10.223815"
+       y="12.098815"
        x="575.82428"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:0%;font-family:lato;-inkscape-font-specification:lato;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        xml:space="preserve"><tspan
          sodipodi:role="line"
          id="tspan9719"
          x="575.82428"
-         y="10.223815"
+         y="12.098815"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:10;font-family:lato;-inkscape-font-specification:lato">θ<tspan
    style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:80.00000119%;font-family:lato;-inkscape-font-specification:lato;baseline-shift:sub"
    id="tspan9729">s</tspan></tspan></text>
     <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:0%;font-family:lato;-inkscape-font-specification:lato;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-       x="982.44928"
-       y="197.09464"
+       x="980.57428"
+       y="198.96964"
        id="text9723"><tspan
-         y="197.09464"
-         x="982.44928"
+         y="198.96964"
+         x="980.57428"
          id="tspan9725"
          sodipodi:role="line"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:10;font-family:lato;-inkscape-font-specification:lato">θ<tspan
@@ -1999,5 +1999,27 @@
          x="531.66864"
          id="tspan4466"
          sodipodi:role="line">D</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:0%;font-family:lato;-inkscape-font-specification:lato;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       x="571.42847"
+       y="0.50790715"
+       id="text10437"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;line-height:10;font-family:lato;-inkscape-font-specification:lato;baseline-shift:baseline"
+         y="0.50790715"
+         x="571.42847"
+         id="tspan10435"
+         sodipodi:role="line">~</tspan></text>
+    <text
+       id="text10441"
+       y="187.37938"
+       x="975.00073"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;line-height:0%;font-family:lato;-inkscape-font-specification:lato;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       xml:space="preserve"><tspan
+         sodipodi:role="line"
+         id="tspan10439"
+         x="975.00073"
+         y="187.37938"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;line-height:10;font-family:lato;-inkscape-font-specification:lato;baseline-shift:baseline">~</tspan></text>
   </g>
 </svg>

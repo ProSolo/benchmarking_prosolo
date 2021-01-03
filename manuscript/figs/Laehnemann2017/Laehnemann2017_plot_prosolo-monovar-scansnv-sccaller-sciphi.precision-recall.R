@@ -5,7 +5,6 @@ cells <- c("PAG1", "PAG2", "PAG5", "PAG9", "PAG10")
 
 # Read in MonoVar stats
 
-# TODO: add "0-1" once computed
 ps <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-01", "0-02", "0-05", "0-1", "0-2", "1")
 cs <- c("0", "1") # indicator whether consensus filtering was on in MonoVar
 
@@ -61,7 +60,7 @@ for (cell in cells) {
 
 # Read in ProSolo stats
 
-fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "1")
+fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "0-5", "1")
 modes <- c( "", ".min_sc_cov_1" )
 
 for (cell in cells) {
@@ -79,6 +78,34 @@ for (cell in cells) {
                   add_column( software = mode,
                               cell = cell,
                               filter = if_else(f == "1", 1.0, as.numeric( str_replace(f, '-', '.') ) ) )
+      
+      positives_negatives <- bind_rows(positives_negatives, current)
+    }
+  }
+}
+
+fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "0-5", "1")
+downsampling <- c(".PNG", ".PNG_70-percent_seed-67", ".PNG_40-percent_seed-54", ".PNG_10-percent_seed-32", ".PNG_empty")
+
+for (cell in cells) {
+  for ( f in fdrs ) {
+    for (d in downsampling) {
+      if ( d == ".PNG_empty" & f %in% c("0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1") ) {
+        next
+      }
+      file <- str_c( "prosolo/fdr_alt-presence/", cell, d, ".alt_sites_only.fdr_", f, "_alt-presence.prosolo.min_sc_cov_1.positives_negatives.ML_set.tsv" )
+      
+      current <- as_tibble( read_tsv(file) ) %>%
+                  add_column( software = case_when( 
+                                d == ".PNG" ~ "ProSolo def 40X bulk",
+                                d == ".PNG_70-percent_seed-67" ~ "ProSolo def 28X bulk",
+                                d == ".PNG_40-percent_seed-54" ~ "ProSolo def 16X bulk",
+                                d == ".PNG_10-percent_seed-32" ~ "ProSolo def  4X bulk",
+                                d == ".PNG_empty" ~ "ProSolo def  0X bulk"
+                                ),
+                              cell = cell,
+                              filter = if_else(f == "1", 1.0, as.numeric( str_replace(f, '-', '.') ) )
+                  )
       
       positives_negatives <- bind_rows(positives_negatives, current)
     }
@@ -108,23 +135,27 @@ for (cell in cells) {
 # Read in SciPhi stats
 
 modes <- c("default", "sensitive")
+fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "0-5", "1")
 
 for (cell in cells) {
   for (m in modes) {
-    if (m == "default") {
-      file <- str_c("sciphi/", cell, ".single_cells.sciphi.positives_negatives.tsv")
-      mode = "SCIPhI default"
-    } else if (m == "sensitive") {
-      file <- str_c("sciphi/", cell, ".single_cells.400000_iterations.sensitive.sciphi.positives_negatives.tsv")
-      mode = "SCIPhI sensitive"
+    for ( f in fdrs ) {
+      if (m == "default") {
+        file <- str_c("sciphi/fdr_alt-presence/", cell, ".single_cells.sciphi.alt_prob.fdr_", f, "_alt-presence.alt_calls.positives_negatives.ML_set.tsv")
+        mode = "SCIPhI default"
+      } else if (m == "sensitive") {
+        file <- str_c("sciphi/fdr_alt-presence/", cell, ".single_cells.400000_iterations.sensitive.sciphi.alt_prob.fdr_", f, "_alt-presence.alt_calls.positives_negatives.ML_set.tsv")
+        mode = "SCIPhI sensitive"
+      }
+      
+      current <- as_tibble( read_tsv(file) ) %>%
+                  add_column( software = mode,
+                              cell = cell,
+                              filter = if_else(f == "1", 1.0, as.numeric( str_replace(f, '-', '.') ) )
+                  )
+      
+      positives_negatives <- bind_rows(positives_negatives, current)
     }
-    
-    current <- as_tibble( read_tsv(file) ) %>%
-                add_column( software = mode,
-                            cell = cell,
-                            filter = 1.0)
-    
-    positives_negatives <- bind_rows(positives_negatives, current)
   }
 }
 
@@ -169,10 +200,15 @@ fils = levels(avg_per_software_and_parameter$filter)
 axis_limits <- c(0.0000001,1)
 
 ggplot(avg_per_software_and_parameter %>%
-         filter(software == "ProSolo default" | software == "ProSolo imputation") %>%
+         filter(
+           software == "ProSolo default" |
+#             software == "ProSolo imputation" |
+             software == "SCIPhI default" #|
+#             software == "SCIPhI sensitive"
+         ) %>%
          mutate(num_filter = as.numeric(levels(filter)[filter]) )
   ) + 
-  geom_point(aes(x = num_filter, y = avg_FDR, color = software, shape = filter)) +
+  geom_point(aes(x = num_filter, y = avg_FDR, color = software, shape = filter), size = 4) +
   geom_abline(intercept = 0) +
   scale_x_continuous(
     trans = "log10",
@@ -183,11 +219,13 @@ ggplot(avg_per_software_and_parameter %>%
     limits=axis_limits
   ) +
   scale_color_manual(
-    values = software_pal
+    values = software_pal,
+    guide = "none"
   ) +
   scale_shape_manual(
     name = "theoretical FDR",
-    values = shape_pal
+    values = shape_pal,
+    guide = "none"
   ) +
   theme_bw(base_size=24, base_family="Lato")  +
   labs(
@@ -196,82 +234,159 @@ ggplot(avg_per_software_and_parameter %>%
     tag = "B",
     title = "5 granulocytes"
   )
-ggsave("Laehnemann2017_prosolo__FDR_ground_truth_vs_theoretical.pdf", device = cairo_pdf, width=11, height=7.5)
+ggsave("Laehnemann2017_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf", device = cairo_pdf, width=8, height=7.5)
  
 
 ggplot(metrics %>%
-        filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),
+        filter(
+          !str_detect(software, "X bulk"),
+          software != "SCcaller default bulk",
+          software != "SCcaller sensitive bulk"
+#          software != "ProSolo imputation",
+#          software != "SCIPhI sensitive"
+          ),
   aes(x = filter, y = F1) ) +
   coord_cartesian( ylim = c(0,1) ) +
-  geom_line( aes(group = interaction(cell, software), color = software, linetype = software)) +
   geom_point( aes(shape = filter_factor, color = software, fill = software), size = 4) +
+  geom_line( aes(group = interaction(cell, software), color = software, linetype = software)) +
   scale_x_continuous(
     trans = 'log10'
   ) +
   scale_shape_manual(
-    guide = "none",
     values = shape_pal
-    ) +
+  ) +
   scale_colour_manual(
-    guide = "none",
-    values = software_pal
-    ) +
+    labels = software_labels,
+    values = software_pal,
+    guide = guide_legend(
+      keywidth = 4
+    )
+  ) +
   scale_fill_manual(
-    guide = "none",
-    values = software_pal
-    ) +
+    labels = software_labels,
+    values = software_pal,
+    guide = guide_legend(
+      keywidth = 4
+    )
+  ) +
   scale_linetype_manual(
-    guide = "none",
-    values = linetype_pal
-    ) +
-#  guides(
-#    shape = guide_legend( title = "threshold used") ) +
+    labels = software_labels,
+    values = linetype_pal,
+    guide = guide_legend(
+      keywidth = 4
+    )
+  ) +
   theme_bw(base_size=24, base_family="Lato")  +
-  theme( axis.text.x = element_text( angle=45, hjust = 1) ) +
-  facet_wrap(~cell, nrow=3) +
+  theme( axis.text.x = element_text( angle=45, hjust = 1),
+         legend.position = "right",
+         legend.direction = "vertical"
+  ) +
+  guides(
+    shape = guide_legend(
+      title = "threshold",
+      ncol = 3
+    ),
+    software = guide_legend(
+      ncol = 1
+    )
+  ) +
+  facet_wrap(~cell, ncol=2) +
   labs(x = "threshold used",
        y = "F_1 score",
-       tag = "B",
        title = "5 granulocytes")
-ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf", device = cairo_pdf, width=14, height=20)
+ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf", device = cairo_pdf, width=21, height=24)
 
 ggplot(avg_per_software_and_parameter %>%
-    filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),
+    filter(
+      software != "SCcaller default bulk",
+      software != "SCcaller sensitive bulk",
+      !str_detect(software, "ProSolo def ")
+      ),
     aes(x = avg_rec, y = avg_prec) ) +
   coord_cartesian( ylim = c(0,1), xlim = c(0,1) ) +
   geom_line( aes( color = software, linetype = software ) ) +
   scale_linetype_manual(
+    guide = "none",
     values = linetype_pal,
     labels = software_labels
     ) +
   geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
   scale_colour_manual(
+    guide = "none",
     values = software_pal,
     labels = software_labels
     ) +
   scale_fill_manual(
+    guide = "none",
     values = software_pal,
     labels = software_labels
     ) +
   scale_shape_manual(
+    guide = "none",
     values = shape_pal
     ) +
-  guides(
-    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
-    shape = guide_legend( title = "threshold used")
-    ) +
+#  guides(
+#    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
+#    shape = guide_legend( title = "threshold used")
+#    ) +
   theme_bw(base_size=24, base_family="Lato")  +
   labs(x = "average recall",
        y = "average precision",
        tag = "B",
        title = "5 granulocytes")
-ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot.pdf", device = cairo_pdf, width=10, height=7.5)
+ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot.pdf", device = cairo_pdf, width=8, height=7.5)
 
 # focus on main tool area
 ggplot(avg_per_software_and_parameter %>%
-    filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),
+    filter(
+      software != "SCcaller default bulk",
+      software != "SCcaller sensitive bulk",
+      !str_detect(software, "ProSolo def ")
+      ),
     aes(x = avg_rec, y = avg_prec) ) +
   coord_cartesian( ylim = c(0.875,1), xlim = c(0,0.35) ) +
+  geom_line( aes( color = software, linetype = software ) ) +
+  scale_linetype_manual(
+    values = linetype_pal,
+    labels = software_labels,
+    guide = "none"
+    ) +
+  geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
+  scale_shape_manual(
+    guide = "none",
+    values = shape_pal
+    ) +
+  scale_colour_manual(
+    guide = "none",
+    labels = software_labels,
+    values = software_pal
+    ) +
+  scale_fill_manual(
+    guide = "none",
+    labels = software_labels,
+    values = software_pal
+    ) +
+#  guides( 
+#    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
+#    shape = guide_legend( title = "threshold used")
+#    ) +
+  theme_bw(base_size=24, base_family="Lato") +
+  labs(x = "average recall",
+       y = "average precision",
+       tag = "B",
+       title = "5 granulocytes")
+ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf", device = cairo_pdf, width=8, height=7.5)
+
+# downsampling
+ggplot(avg_per_software_and_parameter %>%
+    filter(
+      software != "SCcaller default bulk",
+      software != "SCcaller sensitive bulk",
+      !str_detect(software, "ProSolo default"),
+      !str_detect(software, "ProSolo imputation")
+      ),
+    aes(x = avg_rec, y = avg_prec) ) +
+  coord_cartesian( ylim = c(0.19,1), xlim = c(0,0.35) ) +
   geom_line( aes( color = software, linetype = software ) ) +
   scale_linetype_manual(
     values = linetype_pal,
@@ -300,6 +415,12 @@ ggplot(avg_per_software_and_parameter %>%
   theme_bw(base_size=24, base_family="Lato") +
   labs(x = "average recall",
        y = "average precision",
-       tag = "B",
-       title = "5 granulocytes")
-ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf", device = cairo_pdf, width=10, height=7.5)
+       title = "Low bulk coverage sufficient for ProSolo",
+       subtitle = "5 granulocytes")
+ggsave(
+  "Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf",
+  device = cairo_pdf,
+  width=18,
+  height=16
+  )
+

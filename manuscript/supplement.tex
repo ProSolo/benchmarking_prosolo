@@ -1,6 +1,7 @@
 \documentclass[authoryear,preprint,11pt]{scrartcl}
 \addtokomafont{disposition}{\rmfamily}
 \usepackage{graphicx}
+\usepackage{subfig}
 \usepackage{amsthm}
 \usepackage{amsmath}
 \usepackage{amsfonts}
@@ -454,8 +455,8 @@ But as mentioned above, these could be learned from a dataset at hand whenever h
 \begin{figure}[tbp]
  \includegraphics[width=.7\linewidth]{figs/Event_space.pdf}\\
  \caption{
-  It depicts single cell events at a particular genomic site, defined by combinations of the possible true alternative nucleotide frequencies in single cell sequencing ($\theta_s$) and bulk sequencing samples ($\theta_b$) in our probabilistic model.
-  The bulk is always assumed to be a combination of a maximum of two genotypes at a particular site, generating all possible $\theta_b$ (bottom panel).
+  It depicts single cell events at a particular genomic site, defined by combinations of ProSolo's maximum likelihood estimates for possible true alternative nucleotide frequencies in single cell sequencing ($\tilde{\theta}_s$) and bulk sequencing samples ($\tilde{\theta}_b$) in our probabilistic model.
+  The bulk is always assumed to be a combination of a maximum of two genotypes at a particular site, generating all possible $\tilde{\theta}_b$ (bottom panel).
   A tabular representation of the same event definitions is given in Table~\ref{tab:Events} below (this is a larger copy of Figure~\ref{fig:prosolo_alt-calling}D in the main manuscript, reproduced  here for easier cross-reference with that table).\footnotesize\newline
   ADO -- allele dropout, alt -- alternative, err -- error, het -- heterozygous, hom -- homozygous, ref -- reference
   }
@@ -465,7 +466,7 @@ But as mentioned above, these could be learned from a dataset at hand whenever h
 \begin{center}
  \begin{table}[tbp]
   \caption{
-   Single cell events at a particular genomic site are defined by combinations of the possible true alternative nucleotide frequencies in single cell sequencing ($\theta_s$) and bulk sequencing samples ($\theta_b$) in our probabilistic model.
+   Single cell events at a particular genomic site are defined by combinations of ProSolo's likelihood density estimates of the possible true alternative nucleotide frequency ranges in single cell sequencing ($\tilde{\theta}_s$) and bulk sequencing samples ($\tilde{\theta}_b$) in our probabilistic model.
    A graphical representation of the same event definitions is given in Figure~\ref{fig:event-space}.
   }
   \label{tab:Events}
@@ -473,7 +474,7 @@ But as mentioned above, these could be learned from a dataset at hand whenever h
 
   \begin{tabular}{p{22ex}p{12ex}p{12ex}p{33ex}}
    \toprule
-   single cell event & $\theta_s(x)$   & $\theta_b(x)$ & implicit single cell genotype \\
+   single cell event & $\tilde{\theta}_s(x)$   & $\tilde{\theta}_b(x)$ & implicit single cell genotype \\
    \toprule
    $\boldsymbol{E}_{\text{hom ref}}$      & $0$             & $[0,\frac12)$ & homozygous ref                \\
        \midrule
@@ -497,9 +498,15 @@ But as mentioned above, these could be learned from a dataset at hand whenever h
 \end{center}
 
 Using the above model for a genome position $g$, we can compute the likelihood of any combination of possible underlying alternative nucleotide frequencies in the single cell and the bulk sequencing sample, given the respective data.
-All the possible combinations of allele frequencies in the two samples define a two-dimensional space of allele frequencies $\boldsymbol{E}$ (Equation~\ref{eq:event-space}, Figure~\ref{fig:event-space}, Table~\ref{tab:Events}).
-We then define mutually exclusive subspaces of $\boldsymbol{E}$ as single cell events, for example the dropout of an alternative allele across allele frequencies $\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\theta_s} \times [\frac{1}{2}, 1)_{\theta_b}$, providing a set of events $\mathfrak{E}$.
-Assuming that there is no informative prior information about different allele frequencies (i.e. assuming a flat prior across all possible allele frequencies in both samples), we can then calculate the likelihood of such an event as the product of the likelihoods of the allele frequency ranges in the two samples.
+All the possible combinations of allele frequencies in the two samples define a two-dimensional space of allele frequency likelihood density estimates $\boldsymbol{E}$ (Equation~\ref{eq:event-space}, Figure~\ref{fig:event-space}, Table~\ref{tab:Events}).
+We then define mutually exclusive sub-spaces of $\boldsymbol{E}$ as single cell events, for example the dropout of an alternative allele across allele frequencies $\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\tilde{\theta}_s} \times [\frac{1}{2}, 1)_{\tilde{\theta}_b}$, providing a set of events $\mathfrak{E}$.
+For these definitions, we always assume that---regarding a particular genomic site---the bulk cell population can only consist of a maximum of two sub-populations that are exactly one mutated allele apart from each other (Figure~\ref{fig:event-space}, lower panel).
+At allele frequencies $\theta_b \in \{0, 0.5, 1\}$, we assume a homogeneous population of only homozygous reference, heterozygous, or homozygous alternative cells, respectively.
+At frequencies in between, we assume a mixture of heterozygous cells with homozygous reference cells ($\theta_b \in (0,0.5)$), or with homozygous alternative cells ($\theta_b \in (0.5,1)$).
+For the above example ($\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\tilde{\theta}_s} \times [\frac{1}{2}, 1)_{\tilde{\theta}_b}$), this means that we can resolve a contradiction between the likelihood estimate at $\tilde{\theta}_s = 0$, which indicates a homozygous reference single cell, and the likelihood density estimate across $\tilde{\theta}_b \in [0.5,1)$, which indicates that the bulk does not contain any homozygous reference cells.
+Based on our assumption, we decide to trust the bulk sample over the single cell sample, meaning that the bulk is a mixture of a maximum of two sub-populations, and can only contain heterozygous and homozygous alternative cells, rendering a homozygous reference single cell impossible and thus the result of an allele dropout.
+
+Further assuming that there is no informative prior information about different allele frequencies (i.e. assuming a flat prior across all possible allele frequencies in both samples), we can then calculate the likelihood of such an event as the product of the likelihoods of the allele frequency ranges in the two samples.
 For $\boldsymbol{E}_{\text{ADO to ref}}$---and using Equation \ref{eq:thetas-likelihood} to calculate the likelihoods of the allele frequency ranges---this for example becomes:
 
 \begin{equation}
@@ -645,16 +652,28 @@ Three more distant clones (C1, C2, C3 in Figure~\ref{fig:datasets}A), grown from
 With three separate bulk sequencing runs, their joint coverage of about 50 for 80\% of genomic sites is much higher than for the MDA single cells and the unamplified IL-1C bulk (Clones in Figure~\ref{fig:coverage-dists}A).\\
 
 \begin{figure}[!tpb]
- \begin{minipage}{.99\linewidth}
-  \includegraphics[width=.99\linewidth]{figs/Dong2017/Dong2017_coverage_dist.pdf}
+ \begin{minipage}{\linewidth}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_coverage_dist.pdf}
  \end{minipage} \\
- \begin{minipage}{.99\linewidth}
-  \includegraphics[width=.99\linewidth]{figs/Laehnemann2017/Laehnemann2017_coverage_dist.pdf}
+ \begin{minipage}{\linewidth}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_coverage_dist.pdf}
  \end{minipage}
  \caption{
- Sequencing coverage of targeted genomic sites for multiple displacement amplified (MDA) single cells and respective bulk samples.
+ Sequencing coverage of targeted genomic sites for multiple displacement amplified (MDA) single cells and respective bulk samples (continued on following page).
  Panel \textbf{A} shows the coverage of the single cells (IL-11, IL-12), the kindred ground truth clone (IL-1c) and the more distant background bulk (Clones C1, C2, and C3 joined into one sample) of the dataset from \cite{dong_accurate_2017}.
  Panel \textbf{B} shows the coverage of the single cells (PAG1, PAG2, PAG5, PAG9, PAG10) and the background bulk (PNG) of the granulocyte data generated for this evaluation.
+ }
+ \label{fig:coverage-dists}
+\end{figure}
+
+\begin{figure}[!tpb]
+ \ContinuedFloat
+ \begin{minipage}{\linewidth}
+  \includegraphics[width=\linewidth]{figs/Wang2014/Wang2014_coverage_dist.pdf}
+ \end{minipage}
+ \caption{
+ Sequencing coverage of targeted genomic sites for multiple displacement amplified (MDA) single cells and respective bulk samples (continued from previous page).
+ Panel \textbf{C} shows the coverage of the single cells (a1 to a8, h1 to h8, and TNBC-n1 to TNBC-n16), and the bulk samples (TNBC-Pop-Tumor and TNBC-Pop-Normal) that were used as ground truth for the normal single cells (with validated somatic variants added) and as ground truth for the tumor single cells (with validated somatic variants removed), respectively \cite{wang_clonal_2014}.
  }
  \label{fig:coverage-dists}
 \end{figure}
@@ -691,6 +710,23 @@ At the same time, the number of such somatic variants will be small compared to 
 \label{fig:granulocytes-ground-truth}
 \end{figure}
 
+\textbf{Single nucleus exome sequencing of 16 normal and 16 tumor cells from a triple negative breast cancer (TNBC) \citep{wang_clonal_2014}.}
+The third dataset is a published dataset from a TNBC patient, with both tumor and matched normal cells available.
+For each, 16 cells and a bulk sample were whole exome sequenced.
+For the 32 single cells, library preparation was performed on isolated single nuclei \citep{wang_clonal_2014}.
+In addition, \cite{wang_clonal_2014} provide a list of 373 non-synonymous clonal and 94 non-synonymous subclonal somatic variants (Supplementary Tables 6 and 7 in \cite{wang_clonal_2014}) whose presence they validated with deep targeted duplex sequencing.
+Depending on the single cell, we used two different ground truths for two separate evaluations:
+\begin{enumerate}
+    \item For the tumor single cells, we constructed a ground truth from normal bulk sample (as the tumor bulk sample was used for calling with ProSolo) using the same methodology as used for the cell line data (GATK HaplotypeCaller for variant sites, bcftools mpileup for non-variant sites).
+    Please bear in mind that this ground truth will mostly only contain germline variants and only few somatic mutations that appeared early enough in the patient's life to rise to high somatic frequencies.
+    Thus, similar caveats as for the germline ground truth in the granulocyte dataset apply.
+    To mitigate this to a certain degree, we added the 373 clonal validated somatic variants, as these are expected to be present in all tumor single cells.
+    \item For the normal single cells, we constructed a ground truth from the tumor bulk sample (as the normal bulk sample was used for calling with ProSolo) using the same methodology as used for the cell line data (GATK HaplotypeCaller for variant sites, bcftools mpileup for non-variant sites).
+    To reduce the presence of false-positive somatic variants in this ground truth, we removed all 467 validated somatic variants (clonal and subclonal) from the ground truth.
+\end{enumerate}
+Further, we determined the of the validated somatic variants for all software run on this dataset.
+
+
 \subsection{Software and Parameters}
 
 ProSolo was compared against the available tools for single nucleotide variant calling in single cell sequencing data from multiple displacement amplified (MDA) DNA, MonoVar \citep{zafar_monovar:_2016}, SCAN-SNV \citep{luquette_identification_2019}, SCcaller \citep{dong_accurate_2017}, and SCIPhI \citep{singer_single-cell_2018}.\\
@@ -719,7 +755,10 @@ We thus attempted a fairer alternative allele calling comparison by modifying th
  I.e.~we edited the snakemake {\ttfamily rule scansnv\_somatic\_sites} to exclude the following requirements:
  {\ttfamily tab[,bulk.alt] == 0 \& tab[,bulk.idx] == '0/0' \& tab\$dbsnp == '.'}.
 }.
-The different filter thresholds used represent the {\ttfamily --fdr} parameter, which---according to the authors---does not formally control the false discovery rate \citep{luquette_identification_2019}.\\
+The different filter thresholds used represent the {\ttfamily --fdr} parameter, which---according to the authors---does not formally control the false discovery rate \citep{luquette_identification_2019}.
+For the third dataset, added following a suggestion from peer-review, we had to recreate the conda environment for SCAN-SNV, following newer advice in the issues of the repository\footnote{see: \url{https://github.com/parklab/scan-snv/issues/4##issuecomment-596296645}}.
+While this allowed us to run the pipeline, the custom rule for ground truth comparison ran into unsolvable version conflicts.
+After multiple days of debugging attempts, we decided to exclude SCAN-SNV from the analysis of this dataset, also given its performance on the other datasets.\\
 
 For SCcaller (version {\ttfamily 1.2}, as available on bioconda), default parameters were set as recommended in the software repository README \citep{dong_sccaller_2018}.
 We ran four different modes of the software, varying two things:
@@ -740,7 +779,21 @@ On the whole exome dataset with five cells, SCIPhI ran for three weeks for each 
 On the whole genome dataset with two cells, an initial run of SCIPhI was killed due to a server problem after running for more than eight weeks.
 An attempt to restart from intermediate data using the {\ttfamily --il} command line parameter had the model estimations escalating towards unrealistic values, and the crash was thus left unrecoverable.
 A rerun on a server with more performant CPUs led to the sensitive mode finishing after 5 weeks and the default mode after 7.5 weeks.
-As no option for filtering or thresholding based on sensitivity vs. specificity is available, only two unfiltered data points are given in the respective plots (Figure~\ref{fig:alt-calling_prec-rec_global}).
+On the third dataset, added after a suggestion during peer-review, we only ran SCIPhI with default parameters and reduced the iterations to {\ttfamily -l 80000} (and the number of iterations for the mutation to cell assignment to {\ttfamily --ls 40000}) to finish analysis in a reasonable time-frame.
+No guidance is given for those parameters, but the optimization score seemed to have mostly settled with this amount iterations.
+With these parameters, this analysis finished within a week for both the tumor cell and the normal cell datasets of \cite{wang_clonal_2014}.
+As no option for filtering or thresholding based on sensitivity vs. specificity is available from SCIPhI itself, we parsed output with custom scripts to extract what must be a posterior probability of the presence of a variant at a particular site into a format that ProSolo's false discovery rate control mechanism can handle.
+This is the value in the last (fourth) FORMAT field, which according to the header annotation is either the GQ or the PL field (five FORMAT fields are specified, but only four values per sample are provided).
+Judging from the source code\footnote{For the full relevant source code, see here: \url{https://github.com/cbg-ethz/SCIPhI/blob/34975f7050f86325f361c58e8146883af4a2d289/src/output.h##L202-L216}}, this field contains a PHRED scaled posterior probability of the site not being a variant\footnote{This is 1 minus a value that i is used for determining genotypes by SCIPhI with a fixed cutoff of 0.95 a few lines above: \url{https://github.com/cbg-ethz/SCIPhI/blob/34975f7050f86325f361c58e8146883af4a2d289/src/output.h##L205}}.
+We parsed this into the probability of a variant being present and passed it into {\ttfamily prosolo control-fdr} to attempt controlling the false discovery rate (Figures~\ref{fig:alt-calling_prec-rec_global} and \ref{fig:FDR-ground-truth-vs-theoretical}).
+
+For scVILP (has no versioning\footnote{We used the repository at this commit: \url{https://github.com/mae6/scVILP/tree/ef38bc422d44daafe043c7dcb28112a1f1ee2fe6}}; install instructions had to be amended\footnote{Pull request to amend install instructions: https://github.com/mae6/scVILP/pull/4} and manually fixing parsing and dependency issues\footnote{Pull request to allow handling of mitochondrial chromosome: \url{https://github.com/mae6/scVILP/pull/1}; Pull request to fix impossible import of {\ttfamily cdecimal} by upgrading to {\ttfamily decimal} \url{https://github.com/mae6/scVILP/pull/2}}), we tried two modes:
+\begin{enumerate}
+    \item Default parameters as suggested in the README of the software: \url{https://github.com/mae6/scVILP#identify-the-candidate-loci}.
+    \item A more sensitive identification of candidates by turning off heuristic filters ({\ttfamily -ms 1 -nmc 1}) during the execution of {\ttfamily loci\_identify.py}.
+\end{enumerate}
+However, scVILP was not able to handle any of our three benchmarking datasets, with the Gurobi solver that it uses always crashing with an out of memory error, even when provided with more than a Tebibyte of RAM.
+We documented details of runs and crashes for the developers of the tool in an issue in their code repository: \url{https://github.com/mae6/scVILP/issues/5}.
 
 \subsection{Alternative Allele Calling}
 
@@ -760,23 +813,27 @@ Calculations of $p$recision and $r$ecall were based on true positives (TP, alter
 \end{equation}
 
 \begin{figure}[!tpb]
- \begin{minipage}{.36\linewidth}
+ \begin{minipage}{.48\linewidth}
   \includegraphics[height=42ex]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot.pdf} \newline
  \end{minipage}
- \begin{minipage}{.55\linewidth}
+ \begin{minipage}{.48\linewidth}
   \includegraphics[height=42ex]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot.pdf} \newline
+ \end{minipage}
+ \begin{minipage}{.9\linewidth}
+  \includegraphics[height=42ex]{figs/Wang2014/Wang2014_prosolo-monovar-scansnv-sccaller-scvilp_precision-recall-plot.pdf} \newline
  \end{minipage}
  \caption{
   Global view of the precision-recall plots for alternative allele calling across different software modes and filtering thresholds (for zoomed in view on the most interesting areas of the plot, see main manuscript Figure~\ref{fig:alt-calling_prec-rec}).
   \textbf{A} Precision and recall average of two whole genome sequenced single cells IL-11 and IL-12 against their kindred clone IL-1c as ground truth genotypes.
   \textbf{B} Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.\newline 
-  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset in panel B.\newline \footnotesize
+  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset in panel B.\newline
+  \textbf{C} Precision and recall average of 16 tumor and 16 normal single cells sequence at the whole exome level. \newline \footnotesize
   Thresholds used were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
   SCcaller {\ttfamily -a cutoff};
-  SCIPhI {\ttfamily none available}.
+  SCIPhI {\ttfamily prosolo --fdr}.
   Software modes:
   MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
   ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
@@ -790,12 +847,12 @@ The whole genome cell line dataset (Figure~\ref{fig:datasets}A) seems much less 
 In comparison with all other tools, ProSolo achieves the most striking increases in recall of nearly 10\%.
 For example, for a precision above .99, its maximum recall is .766 compared to .705 for MonoVar, .687 for SCIPhI and .610 for SCcaller.
 SCAN-SNV achieves up to .992 precision, but only .0001 recall.
-This can be explained by it aiming at somatic mutations, while the vast majority of SNVs in a genome will be germline variants.
+This can be explained by it aiming at somatic mutations, while the vast majority of SNVs in a genome will be germline variants\footnote{E.g. see this comment in the issues of the respective repository: \url{https://github.com/parklab/scan-snv/issues/5##issuecomment-628107370}}.
 
 Although a relative increase in recall of about 10\% at utmost precision is certainly remarkable, ProSolo demonstrates its power on the second (whole exome) dataset.
 This dataset is considerably more challenging than the first one.
 See Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B for respective results.
-For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above .99, with ProSolo reaching a 20\% increase of recall to .176, compared to SCIPhI's .146, and SCcaller with .072 (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
+For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above .99, with ProSolo reaching a 20\% increase of recall to .178, compared to SCIPhI's .146, and SCcaller with .072 (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
 In comparison, MonoVar achieved a maximum precision of only .962. However, this was at a much higher recall (.141) than for example SCcaller (.095 at a precision of .972).
 SCcaller's decreased recall on this dataset might be due to its estimation of local allelic bias by also taking biases at neighboring sites into account---in whole exome data the number of neighboring sites available for this estimation will be limited and might lead to less reliable estimates.
 On this dataset, SCAN-SNV's recall increased to .0016\% at a decreased maximum precision of .897.
@@ -808,16 +865,9 @@ While both strategies provide a biologically meaningful imputation that will be 
 As this will lead to an overestimation of the recall, we have excluded both SCIPhI's sensitive mode and ProSolo's imputation mode from the discussion of this dataset---however, their results are nevertheless displayed in all respective figures.
 
 \begin{figure}[!tpb]
- \begin{minipage}[t]{.35\linewidth}
- \vspace{0pt}
-  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf} \newline
- \end{minipage}
- \begin{minipage}[t]{.64\linewidth}
- \vspace{0pt}
-  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf} \newline
- \end{minipage}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf}
  \caption{
- Cell-specific $F_1$ scores for different filtering threshold levels for \textbf{A} the whole genome dataset and \textbf{B} the whole exome dataset.\newline \footnotesize
+ Cell-specific $F_1$ scores for different filtering threshold levels for the whole genome dataset.\newline \footnotesize
   Thresholds used were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
@@ -830,7 +880,26 @@ As this will lead to an overestimation of the recall, we have excluded both SCIP
   SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
   SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
  }
- \label{fig:F_1-scores}
+ \label{fig:F_1-scores_Dong2017}
+\end{figure}
+
+\begin{figure}[!tpb]
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf}
+ \caption{
+ Cell-specific $F_1$ scores for different filtering threshold levels for the whole exome dataset.\newline \footnotesize
+  Thresholds used were applied via the following command line options:
+  MonoVar {\ttfamily --t};
+  ProSolo {\ttfamily --fdr};
+  SCAN-SNV {\ttfamily --fdr};
+  SCcaller {\ttfamily -a cutoff};
+  SCIPhI {\ttfamily none available}.
+  Software modes:
+  MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
+  ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
+  SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
+  SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
+ }
+ \label{fig:F_1-scores_Laehnemann2017}
 \end{figure}
 
 ProSolo's improvements in accuracy can be further formalised using the $F_1$ score, the harmonic mean of precision $p$ and recall $r$, with $\beta = 1$ for the general $F$ score defined as \citep{van_rijsbergen_evaluation_1979,chinchor_muc-4_1992}:\\
@@ -839,16 +908,121 @@ ProSolo's improvements in accuracy can be further formalised using the $F_1$ sco
   F_{\beta} = (\beta^2 + 1) \times \frac{p r}{\beta^2 p + r}
 \end{equation}
 
-The per-cell $F_1$ score clearly demonstrates ProSolo's performance advantage (Figure~\ref{fig:F_1-scores}), even when restricting our comparison to ProSolo's (and SCIPhI's) default mode for a fairer comparison on the whole exome dataset with a germline ground truth (see caveat discussed above).
+The per-cell $F_1$ score clearly demonstrates ProSolo's performance advantage (Figures~\ref{fig:F_1-scores_Dong2017} and \ref{fig:F_1-scores_Laehnemann2017}), even when restricting our comparison to ProSolo's (and SCIPhI's) default mode for a fairer comparison on the whole exome dataset with a germline ground truth (see caveat discussed above).
 
 \begin{figure}[!tpb]
- \begin{minipage}[t]{.4\linewidth}
- \vspace{0pt}
-  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo_FDR_ground_truth_vs_theoretical.pdf} \newline
+ \begin{minipage}{\linewidth}
+  \includegraphics[width=\linewidth]{figs/Wang2014/Wang2014_prosolo-monovar-scansnv-sccaller-scvilp_per-cell_precision-recall-plot_focus-tools_normal.pdf} \newline
  \end{minipage}
- \begin{minipage}[t]{.59\linewidth}
+ \caption{
+  Zoomed-in precision and recall per normal cell of the single nucleus exome sequencing dataset \cite{wang_clonal_2014}.
+  Note cells TNBC-n13 and TNBC-n14 as clear outliers.\newline \footnotesize
+  For the thresholds used, see caption of Figure~\ref{fig:alt-calling_prec-rec_global}.
+  }
+ \label{fig:wang_alt-calling_prec-rec_per-cell_normal}
+\end{figure}
+
+\begin{figure}[!tpb]
+ \begin{minipage}{\linewidth}
+  \includegraphics[width=\linewidth]{figs/Wang2014/Wang2014_prosolo-monovar-scansnv-sccaller-scvilp_per-cell_precision-recall-plot_focus-tools_tumor.pdf} \newline
+ \end{minipage}
+ \caption{
+  Zoomed-in precision and recall per tumor cell of the single nucleus exome sequencing dataset \cite{wang_clonal_2014}.
+  Note cell h1 as a clear outlier.\newline \footnotesize
+  For the thresholds used, see caption of Figure~\ref{fig:alt-calling_prec-rec_global}.
+  }
+ \label{fig:wang_alt-calling_prec-rec_per-cell_tumor}
+\end{figure}
+
+For the third dataset of single nucleus whole exome sequencing data of 32 cells from a TNBC patient (16 tumor cells, 16 normal cells), we analysed tumor and normal cells separately (Figure~\ref{fig:alt-calling_prec-rec}C).
+On the tumor cells, ProSolo is the only tool to achieve a precision above .99 (at a recall of .319).
+On the normal cells, both ProSolo and SCIPhI achieve a precision above .99.
+Here, SCIPhI outcompetes ProSolo with a maximum recall of .650 compared to ProSolo's .548.
+While ProSolo can achieve a similar recall (.625, see {\ttfamily --fdr} threshold of 0.2 in Figure~\ref{fig:alt-calling_prec-rec_global}C), this comes at a drastically precision.
+This reflects the inherent uncertainty of the single cell data and showcases a key difference in the approaches of ProSolo and SCIPhI.
+Where ProSolo models each cell and each genomic site separately, SCIPhI's model integrates information across all sites in all cells at once.
+While this can clearly help recover recall, this can also lead to false positive somatic variant calls (Figure~\ref{fig:somatic-recall}) and has clear implications for model complexity and software runtime.
+As all other tools, including ProSolo, are parallelizable over genomic regions and were thus able to process both datasets within days on a multicore machine, we do not report more detailed runtimes for them.
+However, it should be noted that SCIPhI took from 1 week (with iterations reduced below software defaults) on the single nucleus whole exome dataset up to 7.5 weeks on the whole genome dataset, running on a single core without any possibility of parallelization.
+And where adding breadth of coverage (i.e. more genomic sites) or more cells simply means adding more parallel processes in most tools, this will further increase SCIPhI's wall time.
+In addition, with more cells added, the space of possible tree topologies that SCIPhI explores grows exponentially, further increasing runtimes.
+
+In contrast to the whole genome dataset and the granulocyte whole exome dataset, this dataset showed more variation across cells.
+To document this, without further conflating the general precision-recall plots, we include per-cell precision-recall plots, here.
+This shows two outlier cells among the single normal cells, TNBC-n13 and TNBC-n14 (Figure~\ref{fig:wang_alt-calling_prec-rec_per-cell_normal}), and one drastic outlier among the single tumor cells, h1 (Figure~\ref{fig:wang_alt-calling_prec-rec_per-cell_normal}).
+With h1 at a clearly reduced overall coverage (Figure~\ref{fig:coverage-dists}C), these outliers---and further more subtle variation across cells---probably reflect variation in the data generation processes rather than biological differences in genomic variation across cells.
+
+
+\subsection{Estimating the bulk contribution to ProSolo results via downsampling} \label{sec:downsampling}
+
+To estimate the importance of bulk data in ProSolo's single nucleotide variant calling model, we performed a downsampling analysis with the whole exome sequencing dataset of five granulocytes.
+In addition to the full bulk coverage of around 40X at 80\% of exome sites (compare Figure~\ref{fig:coverage-dists}B), we downsampled the bulk sample to around 28X, 16X, 4X, and 0X (Figure~\ref{fig:downsampling}).
+From this analysis, we can see that even a very minimal coverage of 4X will result in very precise variation calls for any false discovery rate control at 0.1 or below.
+Only removing the bulk entirely (0X), will significantly impact ProSolo's precision.
+This is to be expected, as the model does not have any data available to compensate for the uncertainty of amplification bias that the empirical bias distributions account for in the single cell data.
+In line with this increased uncertainty in variation calls, false discovery rates below 0.2 will remove all calls (Figure~\ref{fig:downsampling}), while the recall remains very high in unfiltered calls.
+
+\begin{figure}[!tpb]
+  \includegraphics[width=.99\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf} \newline
+ \caption{
+  Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth, including the results of ProSolo after downsampling from the maximum coverage of 50X to 35X, 20X, 5X or 0X.\newline 
+  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset.\newline \footnotesize
+  Thresholds used were applied via the following command line options:
+  MonoVar {\ttfamily --t};
+  ProSolo {\ttfamily --fdr};
+  SCAN-SNV {\ttfamily --fdr};
+  SCcaller {\ttfamily -a cutoff};
+  SCIPhI {\ttfamily none available}.
+  Software modes:
+  MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
+  ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
+  SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
+  SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
+  }
+ \label{fig:downsampling}
+\end{figure}
+
+
+\subsection{Recall of validated somatic variants from \cite{wang_clonal_2014}} \label{sec:somatic-recall}
+
+\begin{figure}[!tpb]
+  \includegraphics[width=\linewidth]{figs/Wang2014/Wang2014_validated_somatic_genotype_recall.pdf}
+ \caption{
+ Recall of validated non-synonymous somatic mutations in the single tumor cells of \cite{wang_clonal_2014} stratified across genotypes ("0/1" for heterozygous and "1/1" for homozygous alternative) and clonality (clonal vs. subclonal).
+ The expected number of variants with a somatic variant present in the respective number of single tumor cells is given in grey.
+ Clonal somatic variants are always expected to be present in all 16 single tumor cells.
+ }
+ \label{fig:somatic-recall}
+\end{figure}
+For the tumor cells from the \cite{wang_clonal_2014} dataset, we could further determine the recall of non-synonymous somatic variants they had validated via deep targeted duplex sequencing and provided in their Supplementary Tables 6 and 7 (specifying clonal and subclonal variants, respectively).
+Clonal variants were assumed to be present in all 16 tumor cells, with the number of single cells with the subclonal somatic variant present provided by \cite{wang_clonal_2014}.
+While SCIPhI and SCcaller have a better recall of heterozygous genotype calls, neither of them can call homozygous alternative genotypes (Figure~\ref{fig:somatic-recall}).
+On the clonal variants, MonoVar has a higher homozygous alternative recall than ProSolo, but ProSolo has a higher heterozygous recall.
+On the subclonal variants, two things are notable:
+\begin{enumerate}
+  \item ProSolo has lower recall than the other tools, indicating that the depth of coverage in the tumor bulk sample (around 35X for 80\% of the exome, see Figure~\ref{fig:coverage-dists}C) is not sufficient to pick up low-frequency variants and the bulk sample thus further decreases the likelihood of such low frequency variants in the single cells.
+  Thus, while the downsampling analysis above suggests that a very low bulk coverage is sufficient for ProSolo's model to perform well, this seems to be restricted to higher frequency mutations.
+  Assuming an evenly mixed cell population (thus ignoring any population structure or in turn assuming an even sampling of all relevant subclones), the bulk coverage of 35X should allow for the discovery of variant alleles present at a frequency of at least 2.86\% of sampled alleles.
+  Judging by the frequency detected in the targeted duplex sequencing of \cite{wang_clonal_2014}, this should make the detection of 52 of the 94 subclonal variants, which corresponds to the number of missed subclonal variants in Figure~\ref{fig:somatic-recall}.
+  As a consequence, if the aim is to detect lower frequency mutations, we simply recommend a deeper sequencing of the bulk sample.
+  \item SCIPhI calls nine heterozygous mutations in 12 or 15 cells, while the maximum frequency for any of the heterozygous subclonal mutation detected in the deeply sequenced tumor bulk was 0.233, more in the range of the maximum number of six out of 16 cells that \cite{wang_clonal_2014} found any of the subclonal variants in.
+  This suggests that SCIPhI's model over-imputes mutations by aggregating information across cells.
+\end{enumerate}
+
+\subsection{False Discovery Rate Control of Alternative Allele Calling} \label{sec:fdr-of-alt-calling}
+
+\begin{figure}[!tpb]
+ \begin{minipage}[t]{.49\linewidth}
  \vspace{0pt}
-  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo__FDR_ground_truth_vs_theoretical.pdf} \newline
+  \includegraphics[height=40ex]{figs/Dong2017/Dong2017_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf} \newline
+ \end{minipage}
+ \begin{minipage}[t]{.49\linewidth}
+ \vspace{0pt}
+  \includegraphics[height=40ex]{figs/Laehnemann2017/Laehnemann2017_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf} \newline
+ \end{minipage}
+ \begin{minipage}[t]{.99\linewidth}
+ \vspace{0pt}
+  \includegraphics[height=40ex]{figs/Wang2014/Wang2014_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf} \newline
  \end{minipage}
  \caption{
  False discovery rate (FDR, $1 - p$recision) as calculated based on the ground truth, compared to the theoretical FDR we controlled for using ProSolo, for (A) the whole genome data set and (B) the whole exome data set.
@@ -869,22 +1043,22 @@ The per-cell $F_1$ score clearly demonstrates ProSolo's performance advantage (F
  \label{fig:FDR-ground-truth-vs-theoretical}
 \end{figure}
 
-\subsection{False Discovery Rate Control of Alternative Allele Calling} \label{sec:fdr-of-alt-calling}
-
 Finally, a feature where ProSolo clearly stands out, is the control over the false discovery rate.
 As can be seen in Figure~\ref{fig:alt-calling_prec-rec} (and Figure~\ref{fig:alt-calling_prec-rec_global}), ProSolo provides flexible control over precision vs. recall via specifying a false discovery rate of interest.
 While no other tool provides a formal control over the easily interpretable false discovery rate, several of the tools provide other types of thresholds which we varied in attempts to achieve higher precision or recall.
 However, none of them provide control over similar ranges of precision and recall.
+In addition, we ran the standard false discovery rate control implemented in ProSolo on the posterior probabilities provided by SCIPhI, but this did not provide any substantial control over the false discovery rate (Figures~\ref{fig:alt-calling_prec-rec} and \ref{fig:FDR-ground-truth-vs-theoretical}).
 Thus, ProSolo is the only tool that provides the user with the choice of either aiming for more discoveries at the cost of a higher rate of false discoveries, or at aiming for a more limited number of discoveries with higher confidence in each of them.
 
 Further, Figure~\ref{fig:FDR-ground-truth-vs-theoretical}A demonstrates, that ProSolo provides a rigorous control over the false discovery rate on the whole genome dataset.
 The only exception---in both default and imputation mode---is when attempting to control for a false discovery rate below 0.0001.
 This indicates, that ProSolo's model still needs refinement in its resolution for sites with a very high likelihood of an alternative allele present.
-A similar trend can be seen on the whole exome dataset (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}B), but for any attempt to control for a false discovery rate below 0.02.
+The same trend can be seen on the other datasets (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}B and C), but for any attempt to control for a false discovery rate below 0.02 or 0.005.
 This is within the common range of values often chosen as a false discovery rate to control for in practice and not being able to actually achieve the false discovery rate control at such values is usually unacceptable.
-However, as also discussed above, we generally expect the precision (of all tools) to be underestimated on this dataset: using the germline genotypes as ground truth results in misclassifying actual somatic variants in single cells as false positives.
+However, as also discussed above, we generally expect the precision (of all tools) to be underestimated on the whole exome granulocyte dataset: using the germline genotypes as ground truth results in misclassifying actual somatic variants in single cells as false positives.
 This underestimation of precision on this dataset in turn means an overestimation of the false discovery rate ($1 - p$recision), and is thus to be expected.
-This artefact of using a germline ground truth also shows in the discrepancy in the ground-truth based false discovery rate between ProSolo's default and imputation mode when controlling for higher false discovery rates.
+A similar effect is to be expected for the tumor cells in the TNBC dataset, as these will very likely contain more than the clonal somatic variants validated in the original publication \citep{wang_clonal_2014}.
+Further, the artefact of using a germline ground truth on the granulocyte dataset also shows in the discrepancy in the ground-truth based false discovery rate between ProSolo's default and imputation mode when controlling for higher false discovery rates.
 As expected, imputation turned out less precise in the whole genome dataset (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}A).
 In contrast, imputation seems to have improved precision for the whole exome dataset (Figure~\ref{fig:FDR-ground-truth-vs-theoretical}B).
 This would suggest that the larger call set from ProSolo's imputation mode (with a higher recall) is also more precise than the smaller call set from the default mode.
@@ -1030,7 +1204,7 @@ Also, for the whole exome data (right panels in Figures~\ref{fig:gt-calling-true
 
 \subsection{Further Software and Resources used}
 
-All analysis code for both the main processing pipeline and the manuscript figures is available at: \url{https://github.com/prosolo/benchmarking_prosolo} (or as preserved by Zenodo at: \url{https://doi.org/10.5281/zenodo.3769116}).
+All analysis code for both the main processing pipeline and the manuscript figures is available at: \url{https://github.com/prosolo/benchmarking_prosolo} (or as preserved by Zenodo at: \url{https://doi.org/10.5281/zenodo.3824152}).
 An overview and citations of software and resources beyond those mentioned in the methods section are provided in Table~\ref{tab:software-overview}.
 
 \begin{center}

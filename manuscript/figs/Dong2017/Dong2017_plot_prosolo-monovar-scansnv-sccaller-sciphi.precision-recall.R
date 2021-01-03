@@ -61,13 +61,13 @@ for (cell in cells) {
 
 # Read in ProSolo stats
 
-fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "1")
+fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "0-5", "1")
 modes <- c( "", ".min_sc_cov_1" )
 
 for (cell in cells) {
   for ( f in fdrs ) {
     for ( m in modes ) {
-      file <- str_c( "prosolo/fdr_alt-presence/", cell, ".Clones.alt_sites_only.fdr_", f, "_alt-presence.prosolo", m , ".positives_negatives.ML_set.tsv" )
+      file <- str_c( "prosolo/fdr_alt-presence/", cell, ".Clones.alt_sites_only.fdr_", f, "_alt-presence.prosolo", m , ".alt_calls.awk_positives_negatives.ML_set.tsv" )
       
       if ( m == ".min_sc_cov_1" ) {
         mode = "ProSolo default"
@@ -78,7 +78,8 @@ for (cell in cells) {
       current <- as_tibble( read_tsv(file) ) %>%
                   add_column( software = mode,
                               cell = cell,
-                              filter = if_else(f == "1", 1.0, as.numeric( str_replace(f, '-', '.') ) ) )
+                              filter = if_else(f == "1", 1.0, as.numeric( str_replace(f, '-', '.') ) )
+                  )
       
       positives_negatives <- bind_rows(positives_negatives, current)
     }
@@ -108,23 +109,27 @@ for (cell in cells) {
 # Read in SciPhi stats
 
 modes <- c("default", "sensitive")
+fdrs <- c( "0-000001", "0-00001", "0-0001", "0-001", "0-005", "0-01", "0-02", "0-05", "0-1", "0-2", "0-5", "1")
 
 for (cell in cells) {
   for (m in modes) {
-    if (m == "default") {
-      file <- str_c("sciphi/", cell, ".single_cells.default.sciphi.positives_negatives.tsv")
-      mode = "SCIPhI default"
-    } else if (m == "sensitive") {
-      file <- str_c("sciphi/", cell, ".single_cells.400000_iterations.sensitive.sciphi.positives_negatives.tsv")
-      mode = "SCIPhI sensitive"
+    for ( f in fdrs ) {
+      if (m == "default") {
+        file <- str_c("sciphi/fdr_alt-presence/", cell, ".single_cells.default.sciphi.alt_prob.fdr_", f, "_alt-presence.alt_calls.positives_negatives.ML_set.tsv")
+        mode = "SCIPhI default"
+      } else if (m == "sensitive") {
+        file <- str_c("sciphi/fdr_alt-presence/", cell, ".single_cells.400000_iterations.sensitive.sciphi.alt_prob.fdr_", f, "_alt-presence.alt_calls.positives_negatives.ML_set.tsv")
+        mode = "SCIPhI sensitive"
+      }
+      
+      current <- as_tibble( read_tsv(file) ) %>%
+                  add_column( software = mode,
+                              cell = cell,
+                              filter = if_else(f == "1", 1.0, as.numeric( str_replace(f, '-', '.') ) )
+                  )
+      
+      positives_negatives <- bind_rows(positives_negatives, current)
     }
-    
-    current <- as_tibble( read_tsv(file) ) %>%
-                add_column( software = mode,
-                            cell = cell,
-                            filter = 1.0)
-    
-    positives_negatives <- bind_rows(positives_negatives, current)
   }
 }
 
@@ -168,10 +173,15 @@ fils = levels(avg_per_software_and_parameter$filter)
 axis_limits <- c(0.0000001,1)
 
 ggplot(avg_per_software_and_parameter %>%
-         filter(software == "ProSolo default" | software == "ProSolo imputation") %>%
-         mutate(num_filter = as.numeric(levels(filter)[filter]) )
+        filter(
+        software == "ProSolo default" |
+        software == "ProSolo imputation" |
+        software == "SCIPhI default" |
+        software == "SCIPhI sensitive" 
+        ) %>%
+        mutate(num_filter = as.numeric(levels(filter)[filter]) )
   ) + 
-  geom_point(aes(x = num_filter, y = avg_FDR, color = software, shape = filter)) +
+  geom_point(aes(x = num_filter, y = avg_FDR, color = software, shape = filter), size = 4) +
   geom_abline(intercept = 0) +
   scale_x_continuous(
     trans = "log10",
@@ -197,7 +207,7 @@ ggplot(avg_per_software_and_parameter %>%
     tag = "A",
     title = "IL-11 and IL-12"
   )
-ggsave("Dong2017_prosolo_FDR_ground_truth_vs_theoretical.pdf", device = cairo_pdf, width=7.5, height=7.5)
+ggsave("Dong2017_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf", device = cairo_pdf, width=8, height=7.5)
   
 ggplot(metrics %>% 
         filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),
@@ -231,17 +241,16 @@ ggplot(metrics %>%
   ) +
   theme_bw(base_size=24, base_family="Lato")  +
   theme( axis.text.x = element_text( angle=45, hjust = 1),
-         legend.position = "bottom",
+         legend.position = "right",
          legend.direction = "vertical"
   ) +
-  facet_wrap(~cell, ncol = 1) +
+  facet_wrap(~cell, ncol = 2) +
   labs(
     x = "threshold used",
     y = "F_1 score",
-    tag = "A",
     title = "IL-11 and IL-12"
   )
-ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf", device = cairo_pdf, width=8, height=20)
+ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf", device = cairo_pdf, width=21, height=10)
 
 ggplot(avg_per_software_and_parameter %>%
     filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),
@@ -273,7 +282,7 @@ ggplot(avg_per_software_and_parameter %>%
        y = "average precision",
        tag = "A",
        title = "IL-11 and IL-12")
-ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot.pdf", device = cairo_pdf, width=5.5, height=7.5)
+ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot.pdf", device = cairo_pdf, width=8, height=7.5)
 
 # focus on main tool area
 ggplot(avg_per_software_and_parameter %>%
@@ -306,5 +315,5 @@ ggplot(avg_per_software_and_parameter %>%
        y = "average precision",
        tag = "A",
        title = "IL-11 and IL-12")
-ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot_focus-tools.pdf", device = cairo_pdf, width=7, height=7.5)
+ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot_focus-tools.pdf", device = cairo_pdf, width=8, height=7.5)
 

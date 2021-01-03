@@ -8,12 +8,31 @@ linetype_pal = c(
   "MonoVar default" = 1,
   "MonoVar no consensus" = 3,
   "ProSolo default" = 1,
+  "ProSolo def 40X bulk" = 1,
+  "ProSolo def 28X bulk" = 5,
+  "ProSolo def 16X bulk" = 6,
+  "ProSolo def  4X bulk" = 2,
+  "ProSolo def  0X bulk" = 4,
   "ProSolo imputation" = 3,
   "SCAN-SNV sensitive" = 3,
   "SCcaller default dbsnp" = 1,
   "SCcaller sensitive dbsnp" = 3,
   "SCIPhI default" = 1,
-  "SCIPhI sensitive" = 3
+  "SCIPhI sensitive" = 3,
+  "scVILP default" = 1,
+  "scVILP sensitive" = 3
+  )
+
+basic_software_levels = c(
+  "MonoVar default",
+  "MonoVar no consensus",
+  "ProSolo default",
+  "ProSolo imputation",
+  "SCAN-SNV sensitive",
+  "SCcaller default dbsnp",
+  "SCcaller sensitive dbsnp",
+  "SCIPhI default",
+  "SCIPhI sensitive"
   )
 
 # Based on Okabe and Ito colorblind-safe palette (https://jfly.uni-koeln.de/color/)
@@ -32,6 +51,7 @@ factor <- 1/3
 
 Black <- colorblind_pal()(8)[[1]]
 light_Black <- tint(Black, factor)
+very_light_Black <- tint(Black, 3/4)
 
 Vermillion_Red <- colorblind_pal()(8)[[7]]
 light_Vermillion_Red <- tint(Vermillion_Red, factor)
@@ -71,27 +91,43 @@ Yellow <- colorblind_pal()(8)[[5]]
 # cvd_grid(bp)
 
 software_pal <- c(
+  "expected" = very_light_Black,
   "MonoVar default" = Black,
   "MonoVar no consensus" = light_Black,
   "ProSolo default" = Vermillion_Red,
+  "ProSolo def 40X bulk" = Vermillion_Red,
+  "ProSolo def 28X bulk" = Vermillion_Red,
+  "ProSolo def 16X bulk" = Vermillion_Red,
+  "ProSolo def  4X bulk" = Vermillion_Red,
+  "ProSolo def  0X bulk" = Vermillion_Red,
   "ProSolo imputation" = light_Vermillion_Red,
   "SCAN-SNV sensitive" = Yellow,
   "SCcaller default dbsnp" = Blue,
   "SCcaller sensitive dbsnp" = light_Blue,
   "SCIPhI default" = reddish_Purple,
-  "SCIPhI sensitive" = light_reddish_Purple
+  "SCIPhI sensitive" = light_reddish_Purple,
+  "scVILP default" = reddish_Purple,
+  "scVILP sensitive" = light_reddish_Purple
 )
 
 software_labels <- c(
-   "MonoVar default",
-   "MonoVar no consensus",
-   "ProSolo default",
-   bquote('ProSolo imputation'^-B),
-   "SCAN-SNV sensitive",
-   "SCcaller default dbsnp",
-   "SCcaller sensitive dbsnp",
-   "SCIPhI default",
-   bquote('SCIPhI sensitive'^-B)
+   "expected" = "Expected cell number",
+   "MonoVar default" = "MonoVar default",
+   "MonoVar no consensus" = "MonoVar no consensus",
+   "ProSolo default" = "ProSolo default",
+   "ProSolo def 40X bulk" = "ProSolo def 40X bulk",
+   "ProSolo def 28X bulk" = "ProSolo def 28X bulk",
+   "ProSolo def 16X bulk" = "ProSolo def 16X bulk",
+   "ProSolo def  4X bulk" = "ProSolo def  4X bulk",
+   "ProSolo def  0X bulk" = "ProSolo def  0X bulk",
+   "ProSolo imputation" = bquote('ProSolo imputation'^-B),
+   "SCAN-SNV sensitive" = "SCAN-SNV sensitive",
+   "SCcaller default dbsnp" = "SCcaller default dbsnp",
+   "SCcaller sensitive dbsnp" = "SCcaller sensitive dbsnp",
+   "SCIPhI default" = "SCIPhI default",
+   "SCIPhI sensitive" = bquote('SCIPhI sensitive'^-B),
+   "scVILP default" = "scVILP default",
+   "scVILP sensitive" = bquote('scVILP sensitive'^-B)
 )
 
 shape_pal <-
@@ -105,5 +141,6 @@ shape_pal <-
     "0.05" = 13,
     "0.1" = 3,
     "0.2" = 10,
+    "0.5" = 5,
     "1" = 20
   )

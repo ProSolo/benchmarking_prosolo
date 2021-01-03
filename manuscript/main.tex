@@ -31,7 +31,7 @@
 
 \myexternaldocument{supplement}
 
-\title{ProSolo: Accurate Variant Calling from Single Cell DNA Sequencing Data\vspace{3ex}}
+\title{ProSolo: Accurate and Scalable Variant Calling from Single Cell DNA Sequencing Data\vspace{3ex}}
 \author[1,2,3,4]{David Lähnemann}
 \author[4,5]{Johannes Köster}
 \author[3]{Ute Fischer}
@@ -58,13 +58,13 @@
 {\sffamily
 Obtaining accurate mutational profiles from single cell DNA is essential for the analysis of genomic cell-to-cell heterogeneity at the finest level of resolution.
 However, sequencing libraries suitable for genotyping require whole genome amplification, which introduces allelic bias and copy errors.
-As a result, single cell DNA sequencing data violates the assumptions of variant callers developed for bulk sequencing, which when applied to single cells generate significant numbers of false positives and false negatives.
+As a result, single cell DNA sequencing data violates the assumptions of variant callers developed for bulk sequencing, which---when applied to single cells---generate significant numbers of false positives and false negatives.
 Only dedicated models accounting for amplification bias and errors will be able to provide more accurate calls.
 
-We present ProSolo, a probabilistic model for calling single nucleotide variants from multiple displacement amplified single cell DNA sequencing data.
-It introduces a mechanistically motivated empirical model of amplification bias that improves the quantification of genotyping uncertainty.
-To account for amplification errors, it jointly models the single cell sample with a bulk sequencing sample from the same cell population---also enabling a biologically relevant imputation of missing genotypes for the single cell.
-Through these innovations, ProSolo achieves substantially higher performance in calling and genotyping single nucleotide variants in single cells in comparison to all state-of-the-art tools. 
+We present ProSolo, a probabilistic model for calling single nucleotide variants from multiple displacement amplified (MDA) single cell DNA sequencing data.
+The model encompassingly integrates all relevant biases emerging during MDA in a site-specific and scalable---because computationally efficient---manner.
+ProSolo models single cells jointly with a bulk sequencing sample, which enhances variant calling performance, enables identifying MDA induced errors, and supports imputation of genotypes in single cells at insufficiently covered polymorphic sites.
+As a consequence, ProSolo achieves a higher accuracy in calling and genotyping single nucleotide variants in single cells in comparison to state-of-the-art tools. 
 Moreover, ProSolo implements the first approach to control the false discovery rate reliably and flexibly; not only for single nucleotide variant calls, but also for artefacts of single cell methodology that one may wish to identify, such as allele dropout.
 
 ProSolo's model is implemented into a flexible framework, encouraging extensions. The source code and usage instructions are available at: \url{https://github.com/prosolo/prosolo}
@@ -77,7 +77,7 @@ The advent of high-throughput single cell sequencing has recently turned the spo
 the often less abundant somatic or post-zygotic variation that constantly accumulates with every mitotic cell division throughout the lifetime of an organism, turning every individual into a complicated genomic mosaic\cite{forsberg_mosaicism_2017}.
 Estimates for somatic single nucleotide variants (SNVs) range from around $0.6 \cdot 10^{-9}$  up to $60 \cdot 10^{-9}$  mutations per genome position per cell division\cite{lynch_rate_2010,lynch_evolution_2010,tomasetti_half_2013,li_somatic_2013}, with a recent estimate\cite{milholland_differences_2017} based on single-cell sequencing at $2.66 \cdot 10^{-9}$.
 With the size of the human (reference) genome at approximately $3.2 \cdot 10^9$ base pairs, these numbers indicate that even during healthy development, most cells harbour cell-specific point mutations.
-This enables retrospective monitoring of lineages involved in normal organism development, merely by sampling some cells\cite{kester_single-cell_2018}, without having to interfere with its general development, or kill the individual.
+This enables retrospective monitoring of lineages involved in normal organism development, merely by sampling some cells\cite{kester_single-cell_2018}, without having to interfere with its general development or having to kill the individual.
 In other words, this establishes a universally applicable methodology for \textit{in vivo} lineage tracing.
 
 In cancer development, this variation can be used to trace the cellular ancestry of tumour subclones and metastases\cite{ross_onconem:_2016,zafar_sifit:_2017,malikic_integrative_2019,kuipers_advances_2017}, and to characterise the evolutionary dynamics of cancer progression\cite{skums_inference_2019,lahnemann_eleven_2020}.
@@ -101,12 +101,13 @@ This assumes that $\Phi29$ polymerase is agnostic to local template sequence con
 Similarly, for modelling allele dropout, MonoVar\cite{zafar_monovar:_2016} and SCIPhI\cite{singer_single-cell_2018} assume that one rate applies globally (and across all cells).
 This neglects that allele dropout, as the extreme case of uneven allele coverage, varies greatly along the genome and in particular also between cells, because their DNA is amplified separately.
 Interestingly, SCIPhI\cite{singer_single-cell_2018} additionally models allelic amplification bias to be governed by one global beta-binomial distribution (to apply for all cells in a dataset), thereby accounting for allelic dropout a second time (as the extreme values at 0 and 1 of that distribution).
-Improving on that point, tools exist that account for local variation in allelic amplification bias. SCcaller \cite{dong_accurate_2017} and SCAN-SNV\cite{luquette_identification_2019} both estimate the minor allele frequency from nearby germline heterozygous sites. 
+Two tools that more variably model alleleic amplification bias are SCcaller \cite{dong_accurate_2017} and SCAN-SNV\cite{luquette_identification_2019}.
+Both estimate the minor allele frequency from nearby germline heterozygous sites. 
 However, SCcaller employs a fixed global false positive error rate for the calling of alternative alleles\cite{dong_accurate_2017}, and SCAN-SNV makes use of heuristics for filtering candidate variants\cite{luquette_identification_2019}.
 Thus, to the best of our knowledge, there is no statistical model that allows for local variation of bias and errors due to amplification, and for statistically sound false discovery control when calling and genotyping SNVs in single cells.
 
 We describe ProSolo, a variant caller using a unifying statistical framework that takes into account all relevant MDA related biases and errors, allowing for them to vary locally.
-Importantly, our model further enables a computationally efficient implementation, which is challenging even in bulk variant calling when considering local effects due to statistical uncertainties affecting the data\cite{koster_varlociraptor_2020}.
+Importantly, our model enables a scalable---because computationally efficient---implementation, which is challenging even in bulk variant calling when considering local effects due to statistical uncertainties affecting the data\cite{koster_varlociraptor_2020}.
 ProSolo's statistical rigor allows for an accurate control of the false discovery rate when calling alternative alleles or identifying other relevant effects, such as allele dropout.
 
 \section{Results}
@@ -153,8 +154,9 @@ For related work on flexible bulk sequencing sample composition, see Köster et 
    Alternative nucleotide T (orange) is an amplification error.
    Empirical distributions in A and B account for the  amplification bias, and likelihoods for the alternative allele candidates from the bulk reduce the likelihoods of amplification errors, thereby correctly identifying both the error and the original true mutation.
    This is formalised with the model in D.
-   \textbf{(D)} Definition of single cell events based on true underlying alternative allele frequencies in the single cell ($\theta_s$) and the bulk ($\theta_b$) (assuming that the bulk sample has a deep coverage that captures somatic variants).
-   The bulk is always assumed to be a combination of a maximum of two genotypes at a particular site, generating all possible $\theta_b$ (bottom panel).\small\newline
+   \textbf{(D)} Definition of single cell events based on ProSolo's likelihood density estimates for the spectrum of true underlying alternative allele frequencies in the single cell ($\tilde{\theta}_s$) and the bulk ($\tilde{\theta}_b$).
+   The bulk is always assumed to be a combination of a maximum of two genotypes at a particular site, generating all possible $\theta_b$ (bottom panel).
+   The model further assumes that the bulk sample has sufficient coverage to capture somatic variants.\small\newline
    ADO -- allele dropout, alt -- alternative, err -- error, het -- heterozygous, hom -- homozygous, ref -- reference.}
   \label{fig:prosolo_alt-calling}
 \end{figure}
@@ -176,7 +178,7 @@ To accurately quantify the uncertainty introduced by amplification bias, we cons
 \end{equation}
 
 the probability distributions that reflect the shift from the true allele frequency $\theta_s$ to the distorted allele frequency $\rho_s$, as induced by MDA (Figure \ref{fig:prosolo_alt-calling}C).
-We thus formally describe the statistics of read counts skewed by MDA at all sites, encompassing sites that are homozygous for the reference allele, heterozygous, or homozygous for the alternative allele.
+We thus formally describe the statistics of read counts skewed by MDA at all sites, encompassing sites that are homozygous for the reference allele, heterozygous, or homozygous for the alternative allele, to calculate likelihoods for each of these possible true allele frequencies.
 
 To do this, we follow the considerations of Lodato et al.\cite{lodato_somatic_2015} (see Figure S5 and the section ``Modeling MDA-derived alternative read counts'' of the respective supplement for the details), who fitted well-studied probability distributions to empirical distributions they obtained for $\mathbf{P}(\rho_s\mid\theta_s)$ of $\theta_s\in\{0,0.5\}$.
 For sites that are homozygous for the reference allele, amplification bias cannot initially happen.
@@ -219,7 +221,7 @@ Thus, considering bulk samples corresponds to drawing unbiased samples of the en
 This establishes a formal, statistical argument to why one should consider bulk experiments in single cell sequencing whenever possible and why the identification of a mutation in an accompanying bulk sample lends further credibility to the mutation in the single cell in a data-driven way, without assuming any fixed error rate (Figure~\ref{fig:prosolo_alt-calling}C).
 As a consequence, bulk samples can be employed to improve both the sensitivity and specificity of variant calls in the single cell, where increasing depth of coverage of the bulk sample increases the accuracy of the calls. 
 
-For our model, we derive likelihoods for all possible alternative allele frequencies in the background bulk sample.
+For our model, we derive likelihood density estimates for all possible alternative allele frequencies in the background bulk sample.
 Given a set of $n$ reads from the bulk ($b$) read data $\boldsymbol{Z}^b  = \{ \boldsymbol{Z}_1^b, \boldsymbol{Z}_2^b, \dots, \boldsymbol{Z}_n^b \}$, and discrete possible allele frequencies $\frac{m}{n}$ ($m \in 0, 1, \dots, n$), we compute the probability of the data given a particular allele frequency as the product of the probabilities of all the reads:
 
 \begin{equation}
@@ -233,15 +235,24 @@ Here, the probability of an individual read, given a particular allele frequency
 
 \paragraph{Calculating posterior probabilities for events at single cell sites, including a bulk background sample.}
 With single cell genotype likelihoods adjusted by our empirical amplification bias model (Equation \ref{eq:BBLodato}) and auxiliary evidence on alternative alleles from a bulk sample (Equation \ref{eq:bulk-prob}), we define mutually exclusive single cell events.
-Figure~\ref{fig:prosolo_alt-calling}C gives a simplified illustration of how the combination of likelihoods works for calling genotypes in the single cell.
+Figure~\ref{fig:prosolo_alt-calling}C gives a simplified illustration of how the combination of likelihood density estimates across allele frequency $\tilde{\theta}_s,\tilde{theta}_b$ works for calling a heterozygous and a homozygous genotype in the single cell.
 However, our model fully defines the two-dimensional space of possible underlying alternative allele frequencies in the two samples as:
 
 \begin{equation}
   \label{eq:event-space}
-  \boldsymbol{E} =\{0, \frac{1}{2}, 1\}_{\theta_s} \times [0, 1]_{\theta_b}.
+  \boldsymbol{E} =\{0, \frac{1}{2}, 1\}_{\tilde{\theta}_s} \times [0, 1]_{\tilde{\theta}_b}.
 \end{equation}
 
-Within this space, we define single cell events as mutually exclusive subspaces, for example an error-free homozygous alternative site is defined by allele frequencies $\boldsymbol{E}_{\text{hom alt}} = \{ 1 \}_{\theta_s} \times (\frac{1}{2}, 1]_{\theta_b}$  or the dropout of an alternative allele across allele frequencies $\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\theta_s} \times [\frac{1}{2}, 1)_{\theta_b}$ (Figure~\ref{fig:prosolo_alt-calling}D, Table~\ref{tab:Events}).
+For these definitions, we always assume that---regarding a particular genomic site---the bulk cell population can only consist of a maximum of two sub-populations that are exactly one mutated allele apart from each other (Figure~\ref{fig:prosolo_alt-calling}D, lower panel).
+At allele frequencies $\theta_b \in \{0, 0.5, 1\}$, we assume a homogeneous population of only homozygous reference, heterozygous, or homozygous alternative cells, respectively.
+At frequencies in between, we assume a mixture of heterozygous cells with homozygous reference cells ($\theta_b \in (0,0.5)$), or with homozygous alternative cells ($\theta_b \in (0.5,1)$).
+Bearing this assumption in mind, we define single cell events as mutually exclusive two-dimensional sub-spaces.
+For example, an error-free homozygous alternative site is defined by allele frequency likelihood estimates across $\boldsymbol{E}_{\text{hom alt}} = \{ 1 \}_{\tilde{\theta}_s} \times (\frac{1}{2}, 1]_{\tilde{\theta}_b}$.
+And the dropout of an alternative allele is defined across allele frequency likelihood density estimates across $\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\tilde{\theta}_s} \times [\frac{1}{2}, 1)_{\tilde{\theta}_b}$ (Figure~\ref{fig:prosolo_alt-calling}D, Table~\ref{tab:Events}).
+For the latter, please note that we here resolve a contradiction between $\tilde{\theta}_s = 0$, which indicates a homozygous reference single cell, and $\tilde{\theta}_b \in [0.5,1)$, which indicates that the bulk does not contain any homozygous reference cells.
+We decide to trust the bulk sample over the single cell sample, and with our above assumption that the bulk is a mixture of a maximum of two sub-populations, the bulk can only contain heterozygous and homozygous alternative cells.
+This renders a homozygous reference single cell impossible, and we classify this event as evidence for an allele dropout of the alternative allele.
+
 We thus obtain a set of mutually exclusive single cell events (Figure~\ref{fig:prosolo_alt-calling}D):
 
 \begin{equation}
@@ -353,22 +364,24 @@ See the Supplement (Section~\ref{sec:implementation}) for further implementation
 
 We compare ProSolo to the state-of-the-art for SNV calling from single cell sequencing data of multiple displacement amplified (MDA) DNA: MonoVar\cite{zafar_monovar:_2016}, SCAN-SNV\cite{luquette_identification_2019}, SCcaller\cite{dong_accurate_2017} and SCIPhI\cite{singer_single-cell_2018}. We used Snakemake\cite{koster_snakemakescalable_2012} (version {\ttfamily 5.4.0}) to implement the benchmarking workflows.
 For detailed information on benchmarking setup and results, see Supplementary Section~\ref{sec:suppl-benchmarking}.
-All code used for benchmarking is available at: \url{https://github.com/prosolo/benchmarking_prosolo} (or as preserved by Zenodo at: \url{https://doi.org/10.5281/zenodo.3769116}).
+All code used for benchmarking is available at: \url{https://github.com/prosolo/benchmarking_prosolo} (or as preserved by Zenodo at: \url{https://doi.org/10.5281/zenodo.3824152}).
 
 \subsubsection{Datasets and Ground Truths}
 
 \begin{figure}[!tpb]
-  \centering
-  \begin{minipage}{.26\linewidth}
-    \includegraphics[height=32ex]{figs/Dong2017_data_overview.pdf} \\
+  \begin{minipage}{.3\linewidth}
+    \includegraphics[height=38ex]{figs/Dong2017_data_overview.pdf} \\
   \end{minipage}
-  \hspace{4ex}
-  \begin{minipage}{.4\linewidth}
-    \includegraphics[height=32ex]{figs/Laehnemann2017_data_overview.pdf} \\
+  \hspace{6ex}
+  \begin{minipage}{.5\linewidth}
+    \includegraphics[height=38ex]{figs/Laehnemann2017_data_overview.pdf} \\
+  \end{minipage}\\
+  \begin{minipage}{.5\linewidth}
+    \includegraphics[height=38ex]{figs/Wang2014_data_overview.pdf} \\
   \end{minipage}
-  \hspace{4ex}
-  \begin{minipage}{.22\linewidth}
-    \includegraphics[height=32ex]{figs/data_overview_color_legend.pdf} \\
+  \hspace{6ex}
+  \begin{minipage}{.3\linewidth}
+    \includegraphics[height=38ex]{figs/data_overview_color_legend.pdf} \\
   \end{minipage}
   \caption{
    Benchmark Datasets.
@@ -377,11 +390,14 @@ All code used for benchmarking is available at: \url{https://github.com/prosolo/
    \textbf{B} Newly generated whole exome sequencing (WXS) dataset of blood cells.
    Ground truth genotypes of patient CCS1 were determined from sequencing data of family members (boxes male; circles female).
    Granulocytes were isolated from blood using magnetic and fluorescence activated cell sorting (MACS and FACS).
+   \textbf{C} Whole exome sequencing (WXS) dataset from a triple negative breast cancer (TNBC) patient\cite{wang_clonal_2014}.
+   For tumor cells (a1 to a8 and h1 to h8), the cell population (pop) sequencing of the normal sample was taken as the ground truth, including known clonal tumor-specific somatic variants previously validated by deep targeted duplex (td, dx) sequencing\cite{wang_clonal_2014}.
+   For normal cells (n1 to n16), the cell population (pop) sequencing of the tumor sample was taken as the ground truth, after removing known clonal and subclonal tumor-specific somatic variants previously validated by deep targeted duplex (td, dx) sequencing\cite{wang_clonal_2014}.
    }
   \label{fig:datasets}
 \end{figure}
 
-We benchmarked ProSolo on two experimental datasets (Figure~\ref{fig:datasets}), each with a different kind of ground truth:\\
+We benchmarked ProSolo on three experimental datasets (Figure~\ref{fig:datasets}), each with a different kind of ground truth:\\
 
 \paragraph{Whole genome sequencing of almost identical kin-cells from a cell line \cite{dong_accurate_2017}.}
 The first dataset comes from the publication of the SCcaller software\cite{dong_accurate_2017} (Figure~\ref{fig:datasets}A, dataset available from project \mbox{PRJNA305211}, accessions \mbox{SRR2976561} to \mbox{SRR2976566}).
@@ -398,42 +414,53 @@ Unlike other callers (all of which finished in less than 5 days), SCIPhI took fi
 \paragraph{Whole exome sequencing of five human granulocytes with a pedigree ground truth.}
 For the second benchmarking dataset, blood was taken from a patient with a constitutional mismatch repair-deficiency\cite{hoell_constitutional_2014} after informed consent.
 Granulocytes were selected via Magnetic-Activated Cell Sorting (MACS) and Fluorescence Activated Cell Sorting (FACS, Figure~\ref{fig:datasets}B, dataset available as \mbox{EGAD00001005929} in EGA study \mbox{EGAS00001004123}).
-% refs for MACS and FACS? Ute said, this is usually not required.
 Individual cells were isolated using a microfluidics device and subjected to multiple displacement amplification (MDA).
 Using a panel of 16 primer pairs covering different genes across chromosomes for quantitative real-time PCR, we selected granulocytes where at least 15 of these loci were properly amplified.
-% ref for q-rt-PCR? Ute said, this is usually not required.
 For those cells, we performed whole exome capture, sequencing library preparation and paired-end Illumina sequencing.
 From the remaining sorted cell population, we also extracted bulk DNA and submitted it to whole exome capture and paired-end Illumina sequencing without MDA, to generate a bulk background sample for ProSolo and SCcaller.
 
 To generate the ground truth of this dataset, we could leverage previously sequenced bulk whole exome data from the same person, their parents and three siblings \cite{hoell_constitutional_2014} (Figure~\ref{fig:datasets}B).
 To create ground truth germline alternative allele calls, we ran three pedigree-aware variant callers (BEAGLE4.0\cite{browning_improving_2013}, polymutt\cite{li_likelihood-based_2012} and FamSeq\cite{peng_rare_2013,peng_famseq:_2014}) and created a consensus by including only calls where all callers agree at a site and where a maximum of one caller not calling the site was allowed (Figure~\ref{fig:granulocytes-ground-truth}).
 
-\subsubsection{ProSolo achieves highest alternative allele calling accuracy}
+\paragraph{Single nucleus exome sequencing of 16 normal and 16 tumor cells from a triple negative breast cancer (TNBC)\cite{wang_clonal_2014}.}
+The third dataset is a published dataset from a TNBC patient, with both tumor and matched normal cells available (Figure~\ref{fig:datasets}C, dataset available via the sequence read archive, project id \mbox{PRJNA168068} or accession \mbox{SRA053195}).
+For each, 16 single cell nuclei and a bulk sample were whole exome sequenced.
+Further, a number of candidate sites for clonal and subclonal tumor mutations was confirmed by targeted duplex deep sequencing in a separate experiment\cite{wang_clonal_2014}.
+We analyzed the tumor and normal cells separately, ensuring that normal cells were called with the normal bulk background sample and tumor cells with the tumor bulk background sample.
+As the ground truth for the tumor cells, we then used the normal bulk sample augmented with the clonal tumor mutations confirmed by targeted duplex sequencing.
+As the ground truth for the normal cells, we used the tumor bulk sample, removing the confirmed clonal and subclonal tumor mutations. Note that this experimental setup accounts for utmost fairness for all competitors. 
+Variant calling for the ground truths was performed as for cell line data above.
+
+\subsubsection{ProSolo achieves consistently high alternative allele calling accuracy}
 
 The most precise single cell variant callers to date, SCcaller and SCIPhI, only call the presence vs. the absence of an alternative allele (i.e. the heterozygous and the homozygous alternative genotypes called jointly, the joint probability of the blue event areas in Figure~\ref{fig:prosolo_alt-calling}D).
 We thus focused on this for the main benchmarking.
 
 \begin{figure}[!tpb]
- \begin{minipage}{.40\linewidth}
+ \begin{minipage}{.48\linewidth}
   \includegraphics[height=40ex]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot_focus-tools.pdf} \\
  \end{minipage}
- \begin{minipage}{.55\linewidth}
+ \begin{minipage}{.48\linewidth}
   \includegraphics[height=40ex]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf} \\
+ \end{minipage}\newline
+ \begin{minipage}{.9\linewidth}
+  \includegraphics[height=40ex]{figs/Wang2014/Wang2014_prosolo-monovar-scansnv-sccaller-scvilp_precision-recall-plot_focus-tools.pdf} \\
  \end{minipage}
 
  \caption{
   Precision-recall plots for alternative allele calls of ProSolo, MonoVar, SCAN-SNV, SCcaller and SCIPhI.
-  Note that both panels are strong zoom-ins, focusing on (different) areas of interest.
+  Note that all panels are strong zoom-ins, focusing on (different) areas of interest.
   Global views of these panels are provided in Figure~\ref{fig:alt-calling_prec-rec_global}.
   \textbf{A} Precision and recall average of two whole genome sequenced single cells IL-11 and IL-12 against their kindred clone IL-1C as ground truth genotypes.
-  \textbf{B} Precision and recall average of the five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.\newline
-  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset in panel B.\newline \footnotesize
+  \textbf{B} Precision and recall average of the five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.
+  \textbf{C} Precision and recall average of 16 tumor and 16 normal single cells sequenced at the whole exome level. \newline
+  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset in panel B. \newline \footnotesize
   Threshold parameters:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
   SCcaller {\ttfamily -a cutoff};
-  SCIPhI {\ttfamily none available}.
+  SCIPhI {\ttfamily prosolo --fdr}.
   Software modes:
   MonoVar with consensus filtering ({\itshape default}) or without ({\itshape no consensus});
   ProSolo with minimum coverage 1 in single cell ({\itshape default}), or imputing zero coverage sites based on bulk sample ({\itshape imputation});
@@ -450,7 +477,7 @@ The only exception with a recall of .0001 is SCAN-SNV (at a precision of .992).
 This can be explained by it aiming at somatic mutations, while the vast majority of SNVs in a genome will be germline variants.
 
 Although a relative increase in recall of about 10\% at utmost precision is certainly remarkable, ProSolo demonstrates its power on the second (whole exome) dataset (Figure \ref{fig:datasets}B).
-For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above .99, with ProSolo reaching a 20\% increase of recall to .176, compared to SCIPhI's .146, and SCcaller with .072 (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
+For this dataset, only SCcaller, SCIPhI and ProSolo achieved a precision above .99, with ProSolo reaching a 20\% increase of recall to .178, compared to SCIPhI's .146, and SCcaller with .072 (Figures~\ref{fig:alt-calling_prec-rec}B and \ref{fig:alt-calling_prec-rec_global}B).
 In comparison, MonoVar achieved a maximum precision of only .962. However, this was at a much higher recall (.141) than for example SCcaller (.095 at a precision of .972).
 SCcaller's decreased recall on this dataset might be due to its estimation of local allelic bias by also taking biases at neighboring sites into account---in whole exome data the number of neighboring sites available for this estimation will be limited and might lead to less reliable estimates.
 
@@ -468,12 +495,24 @@ In then comparing this to the germline genotype as the ground truth, these calls
 While the underestimation of precision equally affects all tools and generally means that benchmarking results are more conservative than with a more accurate (somatic) ground truth, this overestimation of recall in only these modes of two tools does not allow for a fair comparison.
 We have thus excluded both SCIPhI's sensitive mode and ProSolo's imputation mode from the discussion of the whole exome dataset with its germline ground truth (but their results are nevertheless displayed in Figures~\ref{fig:alt-calling_prec-rec}B, \ref{fig:alt-calling_prec-rec_global}B, \ref{fig:F_1-scores}B and \ref{fig:FDR-ground-truth-vs-theoretical}B for reference).
 
-As almost all tools, including ProSolo, are parallelizable over genomic regions and were thus able to process both datasets within days on a multicore machine, we do not report more detailed runtimes for them. However, it should be noted that SCIPhI took from 3 weeks on the whole exome dataset up to 7.5 weeks on the whole genome dataset, running on a single core without any possibility of parallelization.
+For the third dataset of single nucleus whole exome sequencing data of 32 cells from a TNBC patient (16 tumor cells, 16 normal cells), we analysed tumor and normal cells separately (Figure~\ref{fig:alt-calling_prec-rec}C).
+On the tumor cells, ProSolo is the only tool to achieve a precision above .99 (at a recall of .319).
+On the normal cells, both ProSolo and SCIPhI achieve a precision above .99.
+Here, SCIPhI outcompetes ProSolo with a maximum recall of .650 compared to ProSolo's .548.
+While ProSolo can achieve a similar recall (.625, see {\ttfamily --fdr} threshold of 0.2 in Figure~\ref{fig:alt-calling_prec-rec_global}C), this comes at a drastically reduced precision.
+This reflects the inherent uncertainty of the single cell data and showcases a key difference in the approaches of ProSolo and SCIPhI.
+Where ProSolo models each cell and each genomic site separately, SCIPhI's model integrates information across all sites in all cells at once.
+While this can clearly help recover recall, this can also lead to false positive somatic variant calls (Figure~\ref{fig:somatic-recall}) and has clear implications for model complexity and software runtime.
+As all other tools, including ProSolo, are parallelizable over genomic regions and were thus able to process both datasets within days on a multicore machine, we do not report more detailed runtimes for them.
+However, it should be noted that SCIPhI took from 1 week (with iterations reduced below software defaults) on the single nucleus whole exome dataset up to 7.5 weeks on the whole genome dataset, running on a single core without any possibility of parallelization.
+And where adding breadth of coverage (i.e. more genomic sites) or more cells simply means adding more parallel processes in most tools, both will further increase SCIPhI's wall time.
+In addition, adding more cells exponentially grows the space of possible tree topologies that SCIPhI explores\cite{lahnemann_eleven_2020}, which will further increase its runtime.
 
 Finally, a feature where ProSolo clearly stands out is the control over the false discovery rate.
-As can be seen in Figure~\ref{fig:alt-calling_prec-rec} (and Figure~\ref{fig:alt-calling_prec-rec_global}), ProSolo provides flexible control over precision vs. recall via specifying a false discovery rate of interest.
+As can be seen in Figure~\ref{fig:alt-calling_prec-rec} (and Figure~\ref{fig:alt-calling_prec-rec_global}), ProSolo provides flexible control over precision vs. recall via specifying a false discovery rate of interest and is the only tool to achieve a precision of over .99 on the single tumor cell datasets from Wang et al\cite{wang_clonal_2014}.
 While no other tool provides a formal control over the easily interpretable false discovery rate, several of the tools provide other types of thresholds that we varied in attempts to achieve higher precision or recall.
 However, none of them provide control over similar ranges of precision and recall.
+In addition, we ran the standard false discovery rate control implemented in ProSolo on the posterior probabilities provided by SCIPhI, but this did not provide any substantial control over the false discovery rate (Figure~\ref{fig:alt-calling_prec-rec} and \ref{fig:FDR-ground-truth-vs-theoretical}).
 The only limit to that range with ProSolo's current model, is that it becomes less accurate when controlling for very small false discovery rates (below 0.01\% for alternative allele calling in the whole genome dataset, see Supplement Section~\ref{sec:fdr-of-alt-calling}).
 But this still leaves ProSolo as the only tool that provides the user with the choice of either aiming for more discoveries at the cost of a higher rate of false discoveries, or at aiming for a more limited number of discoveries with higher confidence in each of them.
 
@@ -513,46 +552,60 @@ However, this overestimation of the allele dropout probability does not seem to 
 
 \section{Discussion}
 
-ProSolo is the first method for SNV calling from MDA single cell sequencing data to comprehensively model both amplification bias and amplification errors in a way that allows for site-specific variation (Figure \ref{fig:prosolo_alt-calling}).
-We achieve this by combining a data-driven model of amplification errors that incorporates a bulk background sample alongside the single cell sample with an empirical model of amplification bias, based on a statistical understanding of the MDA process that is mechanistically motivated and dependent upon a site's coverage.
-The underlying model calculates posterior probabilities for fine-grained single cell event definitions, whose false discovery rate can be controlled for and that can pass more information about data uncertainties to probabilistic models in downstream analyses.
-Using a whole genome and a whole exome dataset---each with a different type of ground truth (Figure~\ref{fig:datasets})---we demonstrate that these two innovations of ProSolo combined to achieve better accuracy (Figure~\ref{fig:alt-calling_prec-rec}).
+ProSolo is the first method for SNV calling from MDA single cell sequencing data to comprehensively model both amplification bias and amplification errors in a way that enables both
+\begin{enumerate*}
+ \item the integration of site-specific differences (Figure \ref{fig:prosolo_alt-calling}), and
+ \item a computationally efficient---hence practically scalable---evaluation of all relevant data properties.
+\end{enumerate*}
+We achieve this by combining a data-driven model of amplification errors (that incorporates a bulk background sample alongside the single cell sample) with an empirical model of amplification bias which is dependent upon a site's coverage (and is based on a statistical understanding of the MDA process that is mechanistically motivated).
+The underlying model calculates posterior probabilities for fine-grained single cell event definitions, whose false discovery rate can be controlled for and that can pass more information about data uncertainties to probabilistic models in downstream analyses; including methods that can then use this reduced, but highly accurate, data representation to integrate information across cells, for example for the phylogenetic reconstruction of cell relationships.
+Importantly, the calculation of posterior probabilities scales linearly in the coverage of variant sites, which is the fastest theoretically conceivable, documented by runtimes that have substantial advantages over the state of the art in practice.
+Using one whole genome dataset and two whole exome datasets---each with a different type of ground truth (Figure~\ref{fig:datasets})---we demonstrate that these two innovations of ProSolo combined to achieve competing or better accuracy (Figure~\ref{fig:alt-calling_prec-rec}).
 Moreover, the model allows to accurately control the false discovery rate of variant calls, another novelty of great practical value, and both the model and its modular implementation are easy to adapt and extend.
 
-Especially the joint modeling of a single cell and a bulk sample is favorable from a statistical point of view: in terms of MDA induced bias, the bulk acts as an unbiased sample of the population from which the single cell was drawn.
-This provides a drastically more sensitive approach compared to, for example, the consensus rule of calling alternative alleles only when there is evidence in at least two (or even three) single cells (as implemented in MonoVar\cite{zafar_monovar:_2016}).
+Especially the joint modeling of a single cell and a bulk sample is favorable from a statistical point of view: in terms of MDA induced bias and errors, the bulk acts as an unbiased sample of the population from which the single cell was drawn.
+Given enough bulk coverage (Figure~\ref{fig:somatic-recall}), this provides a drastically more sensitive approach compared to, for example, the consensus rule of calling alternative alleles only when there is evidence in at least two (or even three) single cells (as implemented in MonoVar\cite{zafar_monovar:_2016}).
 A more systematic and biologically relevant model of sharing information is implemented in SCIPhI, where the phylogenetic relationship of cells is part of the estimated parameters.
 Intuitively, if two cells are closely related, they have a higher likelihood of sharing a genotype at a particular site.
 However, both the consensus rule and the sharing of information via an inferred phylogeny requires that more than one single cell exhibit sufficient coverage of an alternative allele to call it reliably.
-This will rarely be achieved in single cell MDA experiments, which are often limited to a few dozen cells.
+This will rarely be achieved in single cell MDA experiments, which are still often limited to a few dozen cells.
 In contrast, bulk sequencing can easily be scaled to a much larger sampling of a cell population---representing hundreds or thousands of cells of a cell population---simply by adding a single higher coverage sample.
-Our benchmarking demonstrated that ProSolo achieves a substantially higher recall than any other tool for a precision above 99\% in identifying the presence of an alternative allele.
+Our benchmarking experiments demonstrated that ProSolo, by jointly modelling a single cell sample with a bulk sample, is the only tool to consistently achieve a precision above .99.
+In almost all datasets this precision is provided in concert with a substantially higher recall than any other tool.
+The only exception is the normal cells dataset from the single nucleus exome sequencing data, for which SCIPhI attains a higher recall above .99 precision---but at the cost of false positive calls of subclonal heterozygous variants (Figure~\ref{fig:somatic-recall}), while lacking the ability to call sites with a homozygous alternative genotype (Figure~\ref{fig:somatic-recall}).
+Interestingly, a bulk coverage as low as 4X already provides drastic performance improvements in ProSolo's model and allows for a meaningful control over the false discovery rate (Supplementary Figure~\ref{fig:downsampling}, but higher bulk coverage will be necessary to detect low-frequency somatic variants (Supplementary Section~\ref{sec:somatic-recall}).
 To summarize our benchmarking of alternative allele calling: SCcaller seems optimized for precision, MonoVar achieved higher recall than SCcaller, and SCAN-SNV does not seem suitable for general variant calling on MDA single cell sequencing data, but is only applicable when restricting interest to somatic variants.
-ProSolo clearly achieves the best accuracy, with particularly striking increases in recall. 
-The only other tool that shows consistent performance across both datasets, but with a recall 10 to 20\% below ProSolo, is SCIPhI.
-However, SCIPhI takes several weeks on a single core without any possibility of parallelization, compared to a runtime of only a few days on a cluster for all the other tools.
+ProSolo clearly achieves the best precision.
+In the two out of three datasets with fewer cells, this precision comes with a higher recall than in any other tool.
+This demonstrates, that ProSolo's model captures data from individual single cells better than any of the existing models.
+Only in the dataset with more cells and a bulk sample with a lower coverage, SCIPhI can reach a higher recall than ProSolo by integrating information across cells (but at the cost false positive somatic mutation calls).
+However, with default configuration SCIPhI takes weeks on a single core without any possibility of parallelization, compared to a runtime of only days on a cluster for all the other tools.
+This is the result of the general approach, integrating information across cells and across genomic sites all at once.
+Thus, any addition of genomic coverage and cells will further increase SCIPhI's wall clock runtime, where adding cells could prove especially troubling: adding cells will exponentially grow the space of possible tree topologies to explore.
+Other tools, including ProSolo, can simply add more parallel processes per site and cell and can thus leverage cluster computing for larger datasets, something that becomes more urgent with the advent of scalable droplet-based single cell whole genome amplification methods\cite{lahnemann_eleven_2020}.
 
 Jointly calling single cell variants with a bulk background sample also enables a biologically relevant imputation of genotypes at sites where single cells lack coverage.
 If genotype profiles without missing values are for example required by downstream tools, ProSolo can provide a cell-population-specific imputation instead of resorting to a majority assignment (limited by the number of single cells sequenced) or even imputation based on external databases (e.g.~dbsnp).
-As our results further demonstrate, ProSolo’s empirical model of amplification bias is robust also for whole exome sequencing data. 
-In contrast, SCcaller---that estimates local amplification bias based on minor allele frequencies at known germline genotypes in the vicinity of an examined site---suffers from a scarcity of neighbouring sites in whole exome data.
+However, any imputation will usually favour germline genotypes over low-frequency somatic genotypes.
+Thus, we suggest to not impute zero-coverage single cell sites whenever possible and instead recommend using and developing downstream software that can deal with both these missing values and the event probabilities that ProSolo provides.
+With this approach, uncertainties in the probabilities and information about missing data are passed on and will allow for more accurate statistical modeling in those downstream analyses.
 
-Finally, ProSolo is the only method that provides a clearly interpretable false discovery rate parameter that can actually control the trade-off between precision and recall.
+Finally, ProSolo is the only method that provides a clearly interpretable false discovery rate parameter that can actually control the trade-off between precision and recall (and this false discovery rate is the only parameter any user will have to specify).
 This can be used on alternative allele calls (Figure~\ref{fig:alt-calling_prec-rec}, Supplement Section~\ref{sec:fdr-of-alt-calling}), the main focus of our benchmarking, but also on any of the events pertinent to single cell analysis (such as allele dropout or amplification errors) or combinations thereof (see Figure~\ref{fig:prosolo_alt-calling}D for all events).
 Thereby, beyond just calling alternative allele presence in a statistically reliable way, ProSolo can, for example, also compute the expected allele dropout rate across the entire genome of a particular cell in a robust manner (Equation \ref{eq:ado-posterior-prob}, Figure~\ref{fig:allele-dropout}).
 
-In addition to such global rates, ProSolo determines reliable site-specific posterior probabilities for all single cell events that might be of interest, including allele-resolved genotypes, allele dropout or amplification errors. 
-We anticipate that such fine-grained probabilities---and the uncertainties they capture---will be informative for improving probabilistic modelling in downstream analyses.
-They could e.g.~prove useful in models for phylogenetic reconstruction of the lineage relationship of sequenced single cells\cite{singer_single-cell_2018,zafar_siclonefit:_2018,koptagel_scuphr:_2018}, while keeping them computationally tractable\cite{lahnemann_eleven_2020}.
+ProSolo determines such global rates from its reliable site-specific posterior probabilities for all single cell events that might be of interest, including allele-resolved genotypes, allele dropout or amplification errors. 
+We anticipate that such fine-grained site-specific probabilities---and the uncertainties they capture---will be informative for improving probabilistic modelling in downstream analyses.
+They could e.g.~prove useful in models for phylogenetic reconstruction of the lineage relationship of sequenced single cells\cite{singer_single-cell_2018,zafar_siclonefit:_2018,koptagel_scuphr:_2018}, thus achieving results similar to or even better than SCIPhI, while keeping the analyses modular and thus computationally tractable\cite{lahnemann_eleven_2020}.
 
 An in-depth look at one of the above-mentioned fine-grained events, allele dropout, showed that ProSolo's allele dropout rate estimates were within the range of published estimates.
 This confirms that our modeling of allele dropout events is realistic and can be useful in alternative allele calling and genotyping.
 However, the allele dropout rate estimations were slightly off in different directions for the different benchmarking datasets, suggesting that the empirical distributions we currently make use of (based on Lodato et al.\cite{lodato_somatic_2015}) may not suit all datasets.
-For example, whole genome amplification may introduce further variability so far not captured by our model.  
+For example, whole genome amplification may introduce further dataset-specific variability so far not captured by our model.
 This conclusion is further supported by the naively calculated allele dropout rate, which is much lower in the high coverage cells of the two datasets (IL-11 for the Dong et al. data\cite{dong_accurate_2017}, PAG1 and PAG10 in our granulocytes; see Figure~\ref{fig:coverage-dists}).
 Interestingly, the sample IL-11 from Dong et al.\cite{dong_accurate_2017} has been suggested to be a doublet\cite{luquette_identification_2019}, which might explain the higher overall coverage and points to a possible source for the discrepancy between the naively calculated and the estimated allele dropout rates.
 If samples PAG1 and PAG10 were doublets as well, this would indicate that our use of empirical distributions in ProSolo provides for more robust event probabilities in the presence of doublets, while heuristic thresholding (as in our naive allele dropout estimate) is very sensitive to such perturbations.
-In general, the use of a fixed empirical model for MDA allelic bias does not seem to impede ProSolo's performance in alternative allele calling compared to the other tools, but has a noticeable effect on genotyping (Supplement, Section~\ref{sec:suppl-gt-calling}) and might be responsible for slight imprecisions when controlling for very small false discovery rates (Supplement Section~\ref{sec:fdr-of-alt-calling}).
+In general, the use of a fixed empirical model for MDA allelic bias does not seem to impede ProSolo's performance in alternative allele calling compared to the other tools, but has a noticeable effect on genotyping (Supplement, Section~\ref{sec:suppl-gt-calling} and Figure~\ref{fig:somatic-recall}) and might be responsible for imprecisions when controlling for very small false discovery rates (Supplement Section~\ref{sec:fdr-of-alt-calling}).
 When future datasets are generated based on improved MDA protocols\cite{lahnemann_eleven_2020}, these effects might be exacerbated.
 We therefore consider it important future work to improve on the fitting of the empirical read count distributions observed when applying MDA to single cells (Supplement, Section~\ref{sec:better_beta-binom}).
 For example, the parameters of the mechanistically motivated combination of beta-binomial distributions for modelling heterozygous genotypes could be learned per single cell sample at germline heterozygous sites---similar to the approaches of SCcaller and SCAN-SNV, but globally per cell with their local variation modelled by their dependence on a site's coverage.
@@ -563,7 +616,8 @@ Studying and implementing the corresponding changes in the future has the potent
 Finally, the modular implementation of ProSolo within the context of the Varlociraptor library\cite{koster_varlociraptor_2020} facilitates the implementation of further features, such as the ones mentioned above, read-backed phasing\cite{bohrson_linked-read_2019,hard_conbase:_2019} or even more variable models of amplification bias\cite{luquette_identification_2019} that could be integrated to exhaustively leverage MDA data information content.
 Since the Varlociraptor library also provides advanced functionality for the calling of insertions, deletions and multiple nucleotide variants (MNVs), one of the immediately following next steps will be to adapt ProSolo to calling those in single cells.\\
 
-Overall, ProSolo provides an accurate and easy-to-use variant caller for single cell MDA sequencing data, which will empower more research using single cell sequencing data.
+Overall, ProSolo provides an accurate and easy-to-use variant caller for single cell MDA sequencing data, which will easily scale to calling variation on more cells and broader genomic coverage.
+It will thus empower more research using single cell DNA sequencing data.
 
 \bibliography{Benchmarking_ProSolo}
 

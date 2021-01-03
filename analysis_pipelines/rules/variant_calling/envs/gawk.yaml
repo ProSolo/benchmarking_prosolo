@@ -1,0 +1,7 @@
+name: bcftools-1-10
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - gawk =5.1
+

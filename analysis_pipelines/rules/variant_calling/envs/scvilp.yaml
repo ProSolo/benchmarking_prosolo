@@ -1,0 +1,14 @@
+name: scvilp
+channels:
+  - gurobi
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - ete3 =3
+  - gurobi =9.0
+  - python =3.6
+  - numpy
+  - matplotlib 
+  - seaborn
+  - scipy

@@ -38,8 +38,8 @@ rule monovar_call_per_chr:
     log:
         "log/variant_calling/{reference}/monovar/{batch}.{threshold}.c{consensus}.{chr}.monovar_call.log"
     threads: 2 
-#    resources:
-#        mem_gb = 2 # memory per thread
+    resources:
+        mem_gb=5
     conda: "envs/Benchmarking_ProSolo_py27.yaml"
     params: threshold = lambda wildcards: wildcards.threshold.replace('-','.')
     shell:
@@ -101,6 +101,8 @@ rule bcftools_concat_chrs_monovar:
     output: "variant_calling/{reference,[^/]+}/monovar/{unit,[^.]+}.{thr,[^.]+}.{cons,c[01]}.monovar.bcf"
     log: "log/variant_calling/{reference}/monovar/{unit}.{thr}.{cons}.bcftools_concat_chrs.monovar.log"
     threads: 1
+    resources:
+        mem_gb=3
     shell:
         "bcftools concat "
         "--output-type b " 
@@ -114,22 +116,179 @@ rule bcftools_split_monovar_by_cell:
         idx = "variant_calling/{reference}/monovar/{unit}.{thr}.{cons}.monovar.bcf.csi"
     output: "variant_calling/{reference,[^/]+}/monovar/{sc,[^.]+}.{unit,[^.]+}.{thr,[^.]+}.{cons,c[01]}.monovar.bcf"
     log: "log/variant_calling/{reference}/monovar/monovar_split_cells/{sc}.{unit}.{thr}.{cons}.monovar.split.log"
+    params:
+        run_name = lambda wc: config["samples"][wc.sc]
+    resources:
+        mem_gb=3
     shell:
-        "bcftools view --samples {wildcards.sc}.P --trim-alt-alleles -O b -o {output} {input.bcf}"
+        "bcftools view --samples {params.run_name} --trim-alt-alleles -O b -o {output} {input.bcf}"
 
 rule monovar_cell_to_tsv:
     input:
         "variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.bcf"
     output:
-        "variant_calling/{reference,[^/]+}/monovar/{sc,[^.]+}.{batch,[^.]+}.{thr,[^.]+}.{cons,c[01]}.monovar.tsv"
+        "variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.tsv"
     log:
         "log/variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar_to_tsv.log"
+    resources:
+        mem_gb=3
     shell:
         "bcftools view -h {input} | grep ^#CHROM | cut -f 1,2,4,5,10- | cut -c2- | "
         " sed -e 's/\.bps\.sorted\.bam//g' > {output}; "
         "bcftools norm --multiallelic -any -O u {input} | "
         "bcftools view -O u --types snps -e 'STRLEN(REF)>1||STRLEN(ALT)>1' | "
         "bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n' >> {output} "
+
+rule monovar_validated_somatic_recall:
+    input:
+        somatics = config["references"]["somatic"],
+        monovar = "variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.tsv"
+    output:
+        "variant_calling/{reference}/monovar/som_gt_recall/{sc}.{batch}.{thr}.{cons}.monovar.somatic_genotype_recall.tsv"
+    log:
+        "log/variant_calling/{reference}/monovar/som_gt_recall/{sc}.{batch}.{thr}.{cons}.monovar.somatic_genotype_recall.log"
+    shell:
+        '''
+        (awk 'function str_to_gt(str) {{
+              if ( str == "het" ) {{
+                return "0/1"
+              }} else if ( str == "hom" ) {{
+                return "1/1"
+              }}
+            }}
+            BEGIN {{
+              OFS="\\t";
+              ORS="";
+              SUBSEP = ":";
+              print "CHROM","POS","REF","ALT","GT","GT_CALL","ALT_PRES_CALL","CLONALITY" "\\n";
+            }}
+            {{
+              if ( FNR==1 ) {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }}
+              if ( NR == FNR ) {{ 
+                if ( FNR!=1 ) {{
+                  genotype[ $(f["chrom"]),$(f["pos"]),$(f["REF"]),$(f["VAR"]) ] = str_to_gt( $(f["zygosity"]) );
+                  clonality[ $(f["chrom"]),$(f["pos"]),$(f["REF"]),$(f["VAR"]) ] = $(f["class"]);
+                }}
+              }} else {{
+                if (FNR!=1) {{
+                  gt = genotype[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
+                  if ( gt != "" ) {{
+                    clon = clonality[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
+                    if ( $5 == "0/0" ) {{
+                        print $1,$2,$3,$4,gt,"FN","FN",clon "\\n";
+                    }} else if ( $5 == "0/1" || $5 == "1/1" ) {{
+                      if ( $5 == gt ) {{
+                        print $1,$2,$3,$4,gt,"TP","TP",clon "\\n";
+                      }} else {{
+                        print $1,$2,$3,$4,gt,"FN","TP",clon "\\n";
+                      }}
+                    }} else {{
+                        print "UNKNOWN_GENOTYPE:",$5 "\\n";
+                    }}
+                  }}
+                }}
+              }}
+            }}' {input.somatics} {input.monovar} > {output}
+        ) 2>{log}
+        '''
+
+
+rule monovar_tsv_to_alt_calls:
+    input:
+        "variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.tsv"
+    output:
+        "variant_calling/{reference,[^/]+}/monovar/{sc,[^.]+}.{batch,[^.]+}.{thr,[^.]+}.{cons,c[01]}.monovar.alt_calls.tsv"
+    shell:
+        '''
+        awk ' \
+            BEGIN {{ OFS="\\t"; ORS=""; }} \
+            {{ \
+                if ( $5 == "0/1" || $5 == "1/1" ) \
+                    {{ alt_status = "ALT" }} \
+                else if ( $5 == "0/0" ) \
+                    {{ alt_status = "REF" }}; \
+                if ( !( $5 == "./." ) ) \
+                    {{ print $1,$2,alt_status; print "\\n" }} \
+            }}' {input} > {output}
+        '''
+
+rule monovar_true_false_calcs_alt_pres_gt_spec_min_sc_cov_awk_alt_calls:
+    input:
+        ground_truth = lambda wc: config["references"][wc.ground_truth],
+        calls =
+            "variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.alt_calls.tsv"
+    output:
+        "variant_calling/{reference}/monovar/{sc}.{batch}.{ground_truth}.{thr,[^.]+}.{cons,c[01]}.monovar.alt_calls.awk_positives_negatives.tsv"
+    log:
+        "log/variant_calling/{reference}/monovar/{sc}.{batch}.{ground_truth}.{thr}.{cons}.monovar.alt_calls.awk_positives_negatives.log"
+    conda:
+        "envs/gawk.yaml"
+    threads: 1
+    resources:
+        mem_gb = 5
+    shell:
+        '''
+        awk \
+        'BEGIN {{ 
+          FS = "\\t"; 
+          OFS = "\\t"; 
+          SUBSEP = ":";
+          alts["0/1"] = 1; 
+          alts["1/1"] = 1; 
+          refs["0/0"] = 1; 
+          tp = 0;
+          fp = 0;
+          fn = 0;
+          tn = 0;
+          p_not_called = 0;
+          n_not_called = 0;
+          no_ground_truth = 0;
+        }} 
+        {{
+          if ( NR == FNR ) {{ 
+            if ( ($1, $2) in calls ) {{ 
+              if ( $3 == "ALT" ) {{ calls[$1,$2] = $3 }} 
+            }} 
+            else {{ 
+              n_calls += 1; 
+              calls[$1, $2] = $3; 
+            }} 
+          }} 
+          else {{ 
+            if ( ($1, $2) in calls ) {{
+              n_gt += 1;
+              if ( calls[$1, $2] == "ALT" ) {{ 
+                if ( $3 in alts ) {{ tp += 1; }} 
+                else {{ 
+                  if ( $3 in refs ) {{ fp += 1; }} 
+                }} 
+              }} 
+              else {{ 
+                if ( calls[$1, $2] == "REF" ) {{ 
+                  if ( $3 in alts ) {{ fn += 1; }} 
+                  else {{ 
+                    if ( $3 in refs ) {{ tn += 1; }} 
+                  }} 
+                }} 
+              }} 
+            }} 
+            else {{ 
+              if ( $3 in alts ) {{ p_not_called += 1; }} 
+              if ( $3 in refs ) {{ n_not_called += 1; }} 
+            }} 
+          }} 
+        }}
+        END {{ 
+          no_ground_truth = n_calls - n_gt;
+          print "TP", "FP", "FN", "TN", "P_not_called", "N_not_called", "no_ground_truth";
+          print tp, fp, fn, tn, p_not_called, n_not_called, no_ground_truth;
+        }}' \
+         {input.calls} <( zcat {input.ground_truth} ) \
+         >{output} \
+         2>&1 | tee {log}
+        '''
+
+
 
 rule monovar_true_false_pos_neg_calculations:
     input:
@@ -140,7 +299,7 @@ rule monovar_true_false_pos_neg_calculations:
     log:
         "log/variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.positives_negatives.log"
     resources:
-        mem_gb = 15
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/monovar.P-N_stats.alt-calling.R "
         " --gt {input.ground_truth} "
@@ -157,7 +316,7 @@ rule monovar_genotype_matching_calculations:
     log:
         "log/variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.gt_matching.log"
     resources:
-        mem_gb = 15
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/monovar.genotype-calling.matches.R "
         " --gt {input.ground_truth} "
@@ -175,7 +334,7 @@ rule monovar_genotype_matching_calculations_minGQ_30:
     log:
         "log/variant_calling/{reference}/monovar/{sc}.{batch}.{thr}.{cons}.monovar.min_GQ_30.gt_matching.log"
     resources:
-        mem_gb = 15
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/monovar.genotype-calling.matches.R "
         " --gt {input.ground_truth} "

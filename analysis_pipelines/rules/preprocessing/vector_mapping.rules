@@ -111,14 +111,14 @@ rule bam_2_unmapped_paired_fq:
         expand("{{run,[^.]+}}{infix}{{rest}}.unmapped.fastq.gz",
                 infix = config["infix"]["pair"] )
     params:
-        forward = "{run}" + config["infix"]["pair"][0] + "{rest}.unmapped.fastq",
-        reverse = "{run}" + config["infix"]["pair"][1] + "{rest}.unmapped.fastq"
+        fwd = "{run}" + config["infix"]["pair"][0] + "{rest}.unmapped.fastq",
+        rev = "{run}" + config["infix"]["pair"][1] + "{rest}.unmapped.fastq"
     threads: 1
     shell:
         """
-        samtools fastq -F 0x2 -1 {params.forward} -2 {params.reverse} {input};
-        gzip {params.forward};
-        gzip {params.reverse}
+        samtools fastq -F 0x2 -1 {params.fwd} -2 {params.rev} {input};
+        gzip {params.fwd};
+        gzip {params.rev}
         """
 
 

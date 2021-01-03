@@ -66,12 +66,30 @@ rule bam_mark_duplicates:
         metrics = "{prefix}.MarkDupMetrics.txt"
     log: "log/{prefix}.MarkDup.log"
     resources: 
-        mem_gb = 4
+        mem_gb = 11
     shell:
-        "picard MarkDuplicatesWithMateCigar "
+        "picard -Xmx5g -Xms1g MarkDuplicatesWithMateCigar "
         "INPUT={input} "
         "OUTPUT={output.bam} "
         "MINIMUM_DISTANCE=500 "
+        "METRICS_FILE={output.metrics} "
+        "REMOVE_DUPLICATES=false "
+        "2>&1 | tee {log}"
+
+
+rule bam_mark_duplicates_single_end_reads:
+    input:
+        "{prefix}.sorted.bam"
+    output:
+        bam = "{prefix}.MarkDup_SE.sorted.bam",
+        metrics = "{prefix}.MarkDupMetrics.txt"
+    log: "log/{prefix}.MarkDup_SE.log"
+    resources: 
+        mem_gb = 11
+    shell:
+        "picard -Xmx5g -Xms1g MarkDuplicates "
+        "INPUT={input} "
+        "OUTPUT={output.bam} "
         "METRICS_FILE={output.metrics} "
         "REMOVE_DUPLICATES=false "
         "2>&1 | tee {log}"

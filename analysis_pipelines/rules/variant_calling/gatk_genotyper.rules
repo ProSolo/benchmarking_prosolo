@@ -44,7 +44,7 @@ def _return_unit_samples(unit):
     elif unit in config['batches']:
         return config['batches'][ unit ]
     elif unit in config['samples']:
-        return config['samples'][ unit ]
+        return unit
 
 
 rule gatk_genotyping_per_unit_per_chr:
@@ -52,26 +52,27 @@ rule gatk_genotyping_per_unit_per_chr:
         dbsnp,
         ref=_get_ref,
         gvcfs = lambda wildcards: expand(
-                tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
+                tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
                 reference = wildcards.reference,
                 sample = _return_unit_samples(wildcards.unit),
                 chr = wildcards.chr),
         idx = lambda wildcards: expand(
-                tmp +"/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx",
+                tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx",
                 reference = wildcards.reference,
                 sample = _return_unit_samples(wildcards.unit),
                 chr = wildcards.chr)
-    output: tmp + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk.vcf"
+    output: tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk.vcf"
     params: custom = config["settings"]["gatk"].setdefault("params", "") +
                      config["settings"]["gatk"].setdefault("GenotypeGVCFs", "")
     log: "log/variant_calling/{reference}/{unit}.{chr}.gatk_GenotypeGVCFs.log"
     threads: 8 
-    resources: mem_gb=2
+    resources:
+        mem_gb=11
     run:
         gvcfs = _gatk_multi_arg("--variant", input.gvcfs)
         shell(
             "gatk "
-            "-Xmx4g "
+            "-Xmx5g -Xms1g "
             "-T GenotypeGVCFs {gvcfs} "
             "-R {input.ref} "
             "--dbsnp {dbsnp} "
@@ -92,26 +93,27 @@ rule gatk_genotyping_all_sites_per_unit_per_chr:
         dbsnp,
         ref=_get_ref,
         gvcfs = lambda wildcards: expand(
-                tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
+                tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
                 reference = wildcards.reference,
                 sample = _return_unit_samples(wildcards.unit),
                 chr = wildcards.chr),
         idx = lambda wildcards: expand(
-                tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx",
+                tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx",
                 reference = wildcards.reference,
                 sample = _return_unit_samples(wildcards.unit),
                 chr = wildcards.chr)
-    output: tmp + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk_all.vcf"
+    output: tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{unit,[^.]+}.{chr,chr(?:\d{1,2}|[XYM])}.gatk_all.vcf"
     params: custom = config["settings"]["gatk"].setdefault("params", "") +
                      config["settings"]["gatk"].setdefault("GenotypeGVCFs", "")
     log: "log/variant_calling/{reference}/{unit}.{chr}.gatk_all_GenotypeGVCFs.log"
     threads: 8 
-    resources: mem_gb=2
+    resources:
+        mem_gb=11
     run:
         gvcfs = _gatk_multi_arg("--variant", input.gvcfs)
         shell(
             "gatk "
-            "-Xmx4g "
+            "-Xmx5g -Xms1g "
             "-T GenotypeGVCFs {gvcfs} "
             "--intervals " + config["settings"]["capture"] + "/SureSelectHumanAllExonV5plusUTR.target.hg19.interval_list "
             "-R {input.ref} "
@@ -137,7 +139,7 @@ rule gatk_CombineVariants_per_unit:
     input:
         ref = _get_ref,
         gvcfs = lambda wildcards: expand(
-                tmp + "/variant_calling/{reference}/{unit}.{chr}.gatk.vcf",
+                tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{unit}.{chr}.gatk.vcf",
                 reference = wildcards.reference,
                 unit = wildcards.unit, chr = chrlist)
     output: "variant_calling/{reference}/{unit,[^.]+}.gatk.vcf"
@@ -145,11 +147,12 @@ rule gatk_CombineVariants_per_unit:
                      config["settings"]["gatk"].get("CombineVariants", "")
     log: "log/variant_calling/{reference}/{unit}.gatk_CombineVariants.log"
     threads: 8
-    resources: mem_gb=2
+    resources:
+        mem_gb=11
     run:
         gvcfs = _gatk_multi_arg("--variant", input.gvcfs)
         shell(
-            "gatk -T CombineVariants {gvcfs} "
+            "gatk -Xmx5g -Xms1g -T CombineVariants {gvcfs} "
             "-R {input.ref} "
             "--out {output} "
             "-nt {threads} "

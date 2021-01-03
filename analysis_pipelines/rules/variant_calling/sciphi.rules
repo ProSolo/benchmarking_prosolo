@@ -23,9 +23,12 @@ rule samtools_mpileup_single_cell_per_chr:
         bais = lambda wildcards: expand("mapping/{reference}/samples/{sample}.bps.sorted.bam.bai",
                     reference = wildcards.reference, sample = config["batches"][wildcards.batch])
     output:
-        temp("variant_calling/{reference,[^/]+}/sciphi/{batch,[^.]+}.{chrom,chr(?:\d{1,2}|[XYM])}.mpileup")
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference,[^/]+}/sciphi/{batch,[^.]+}.{chrom,chr(?:\d{1,2}|[XYM])}.mpileup"
+    log:
+        "logs/variant_calling/{reference}/sciphi/{batch}.{chrom}.mpileup"
+    threads: 2
     shell:
-        "samtools mpileup "
+        "(samtools mpileup "
         " -f {input.ref} "
         " -B "
         " -d 1000 "
@@ -33,18 +36,18 @@ rule samtools_mpileup_single_cell_per_chr:
         " -Q 30 "
         " -r {wildcards.chrom} "
         " {input.bams} "
-        " > {output}"
+        " > {output} ) >{log}"
 
 
 rule samtools_combine_mpileups:
     input:
-        lambda w: expand( "variant_calling/{reference}/sciphi/{batch}.{chrom}.mpileup",
+        lambda w: expand( tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch}.{chrom}.mpileup",
             reference = w.reference,
             batch = w.batch,
             chrom = chrlist
             )
     output:
-        "variant_calling/{reference}/sciphi/{batch,[^.]+}.mpileup"
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch,[^.]+}.mpileup"
     shell:
         'cat {input} > {output}'
 
@@ -64,11 +67,11 @@ rule create_sciphi_bam_file_list:
 rule sciphi:
     input:
         filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
-        mpileup = "variant_calling/{reference}/sciphi/{batch}.mpileup"
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch}.mpileup"
     output:
-        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.default.sciphi.vcf"
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.{iterations}_iterations.default.sciphi.vcf"
     log:
-        "log/variant_calling/{reference}/sciphi/{run}/{batch}.default.sciphi_call.log"
+        "log/variant_calling/{reference}/sciphi/{run}/{batch}.{iterations}_iterations.default.sciphi_call.log"
     threads: 2 
     conda: "envs/sciphi.yaml"
     params:
@@ -81,17 +84,46 @@ rule sciphi:
         " --in {input.filenames} "
         " --lz 1 "
         " --seed {wildcards.run} "
-        " -l 1000000 "
+        " -l {wildcards.iterations} "
         " {input.mpileup} 2>&1 | tee {log}"
+
+ruleorder: sciphi_sampling_its_specified > sciphi
+
+rule sciphi_sampling_its_specified:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch}.mpileup"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.{iterations}-{sampling_iterations}_iterations.default.sciphi.vcf"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{batch}.{iterations}-{sampling_iterations}_iterations.default.sciphi_call.log"
+    benchmark:
+        "benchmark/variant_calling/{reference}/sciphi/{run}/{batch}.{iterations}-{sampling_iterations}_iterations.default.sciphi_call.tsv"
+    threads: 1 
+    conda: "envs/sciphi.yaml"
+    params:
+        out = lambda wildcards, output: path.splitext(str(output))[0],
+        out_index = lambda wildcards, output: path.dirname(str(output)) + "index"
+    shell:
+        "sciphi "
+        " -o {params.out} "
+        " --ol {params.out_index} "
+        " --in {input.filenames} "
+        " --lz 1 "
+        " --seed {wildcards.run} "
+        " -l {wildcards.iterations} "
+        " --ls {wildcards.sampling_iterations} "
+        " {input.mpileup} 2>&1 | tee {log}"
+
 
 rule sciphi_quick_sensitive:
     input:
         filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
-        mpileup = "variant_calling/{reference}/sciphi/{batch}.mpileup"
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch}.mpileup"
     output:
-        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.400000_iterations.sensitive.sciphi.vcf"
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{batch,[^.]+}.{iterations}_iterations.sensitive.sciphi.vcf"
     log:
-        "log/variant_calling/{reference}/sciphi/{run}/{batch}.400000_iterations.sensitive.sciphi_call.log"
+        "log/variant_calling/{reference}/sciphi/{run}/{batch}.{iterations}_iterations.sensitive.sciphi_call.log"
     threads: 2 
     conda: "envs/sciphi.yaml"
     params:
@@ -104,7 +136,7 @@ rule sciphi_quick_sensitive:
         " --in {input.filenames} "
         " --lz 1 "
         " --seed {wildcards.run} "
-        " -l 400000 "
+        " -l {wildcards.iterations} "
         " --cwm 1 "
         " --mnp 1 "
         " --ms 1 "
@@ -140,6 +172,286 @@ rule bcftools_split_sciphi_by_cell:
         "log/variant_calling/{reference}/sciphi/{run}/sciphi_split_cells/{sc}.{batch}.{extra_options}sciphi.split.log"
     shell:
         "bcftools view --samples {wildcards.sc}.bps.sorted.bam --trim-alt-alleles -O b -o {output} {input.vcf}"
+
+
+rule bcftools_adjust_for_vlr_fdr:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.bcf"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/{sc,[^.]+}.{batch,[^.]+}.{extra_options,(|[^/]+)}sciphi.alt_prob.bcf"
+    conda:
+        "envs/bcftools-1-10.yaml"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.alt_prob.log"
+    shell:
+        "(bcftools view {input} | "
+        " awk "
+        "  'BEGIN {{ "
+        "     OFS=\"\\t\"; "
+        "     getline; "
+        "     print $0; "
+        "     print \"##INFO=<ID=PROB_ALT,Number=A,Type=Float,Description=\\\"PHRED-scaled probability for presence of an ALT allele\\\">\"; "
+        "   }} "
+        "   {{ "
+        "     if ($1 !~ \"^#\") {{ "
+        "       split($10, format_entries, \":\"); "
+        "       phred_prob_not_alt=format_entries[4]; "
+        "       phred_prob_alt=-10 * log( 1 - 10 ^ (- phred_prob_not_alt / 10) ) / log(10); "
+        "       $8=$8 \";PROB_ALT=\" phred_prob_alt; "
+        "     }} "
+        "     print $0; "
+        "   }}' | "
+        " bcftools view -O b -o {output} ) 2>{log} "
+
+
+rule sciphi_prosolo_fdr_alt_presence:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.alt_prob.bcf"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/fdr_alt-presence/{sc,[^.]+}.{batch,[^.]+}.{extra_options,(|[^/]+)}sciphi.alt_prob.fdr_{fdr,[^.]+}_alt-presence.bcf"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.log"
+    params: fdr = lambda wildcards: wildcards.fdr.replace('-','.')
+    resources:
+        mem_gb=3
+    shell:
+        'prosolo control-fdr '
+        ' {input} '
+        ' --events ALT ' # all the events that indicate the presence of an ALT allele
+        ' --var SNV '
+        ' --fdr {params.fdr} '
+        ' --output {output} '
+        '  2>&1 | tee {log}; '
+
+rule sciphi_fdr_to_tsv:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.bcf"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/fdr_alt-presence/{sc,[^.]+}.{batch,[^.]+}.{extra_options,(|[^/]+)}sciphi.alt_prob.fdr_{fdr,[^.]+}_alt-presence.tsv"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.bcf_to_tsv.log"
+    shell:
+        '''
+        bcftools norm \
+        --multiallelic \
+        -any \
+        {input} | \
+        bcftools view -H \
+        --types snps | \
+        awk 'BEGIN {{ OFS="\\t"; ORS=""; }} \
+        {{ split($8,INFO,";"); \
+            for (i in INFO) {{ \
+                if ( match(INFO[i],"PROB_|_AF") == 0 ) {{ delete INFO[i]; }}; \
+            }}; \
+            if ( NR == 1 ) {{
+                print "CHROM\\tPOS\\tREF\\tALT"; \
+                for (i in INFO) {{ split(INFO[i],header,"="); print "\\t"header[1]; }}; \
+            }} \
+            print "\\n"; print $1,$2,$4,$5; \
+            for (i in INFO) {{ split(INFO[i],pair,"="); print "\\t"pair[2]; }}; \
+        }}' \
+        > {output}
+        '''
+
+rule sciphi_tsv_to_gt_calls:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.tsv"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/fdr_alt-presence/som_gt_recall/{sc,[^.]+}.{batch,[^.]+}.{extra_options,(|[^/]+)}sciphi.alt_prob.fdr_{fdr,[^.]+}_alt-presence.gt_calls.ML_set.tsv"
+    threads: 2
+    shell:
+        '''
+        awk 'function decode_phred(phred) {{ return 10^(-phred/10) }}
+            BEGIN {{
+                OFS="\\t";
+                ORS="";
+                print "CHROM","POS","REF","ALT","GT" "\\n"
+            }}
+            NR==1  {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }}
+            NR!=1 {{ prob_alt = decode_phred( $(f["PROB_ALT"]) );
+                if (prob_alt > 0.5)
+                    {{ gt = "0/1" }}
+                else {{ gt = "0/0" }};
+                print $(f["CHROM"]),$(f["POS"]),toupper($(f["REF"])),toupper($(f["ALT"])),gt "\\n"
+            }}' {input} > {output}
+        '''
+
+rule sciphi_validated_somatic_recall:
+    input:
+        somatics = config["references"]["somatic"],
+        sciphi = "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/som_gt_recall/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.gt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/som_gt_recall/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.gt_calls.ML_set.somatic_genotype_recall.tsv"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/som_gt_recall/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.gt_calls.ML_set.somatic_genotype_recall.log"
+    shell:
+        '''
+        (awk 'function str_to_gt(str) {{
+              if ( str == "het" ) {{
+                return "0/1"
+              }} else if ( str == "hom" ) {{
+                return "1/1"
+              }}
+            }}
+            BEGIN {{
+              OFS="\\t";
+              ORS="";
+              SUBSEP = ":";
+              gt_status = "FN";
+              alt_status = "FN";
+              print "CHROM","POS","REF","ALT","GT","GT_CALL","ALT_PRES_CALL","CLONALITY" "\\n";
+            }}
+            {{
+              if ( FNR==1 ) {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }}
+              if ( NR == FNR ) {{ 
+                if ( FNR!=1 ) {{
+                  genotype[ $(f["chrom"]),$(f["pos"]),$(f["REF"]),$(f["VAR"]) ] = str_to_gt( $(f["zygosity"]) );
+                  clonality[ $(f["chrom"]),$(f["pos"]),$(f["REF"]),$(f["VAR"]) ] = $(f["class"]);
+                }}
+              }} else {{
+                if (FNR!=1) {{
+                  gt = genotype[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
+                  if ( gt != "" ) {{
+                    clon = clonality[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
+                    if ( $(f["GT"]) == "0/0" ) {{
+                        alt_status = "FN";
+                        gt_status = "FN";
+                    }} else if ( $(f["GT"]) == "0/1" || $(f["GT"]) == "1/1" ) {{
+                      alt_status = "TP";
+                      if ( $(f["GT"]) == gt ) {{
+                        gt_status = "TP";
+                      }} else {{
+                        gt_status = "FN";
+                      }}
+                    }} else {{
+                        alt_status = "FN";
+                        gt_status = "FN";
+                        print "UNKNOWN_GENOTYPE:",$(f["GT"]) "\\n";
+                    }}
+                    print $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]),gt,gt_status,alt_status,clon "\\n";
+                  }}
+                }}
+              }}
+            }}' {input.somatics} {input.sciphi} > {output}
+        ) 2>{log}
+        '''
+
+rule sciphi_tsv_to_alt_calls:
+    input:
+        "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.tsv"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/fdr_alt-presence/{sc,[^.]+}.{batch,[^.]+}.{extra_options,(|[^/]+)}sciphi.alt_prob.fdr_{fdr,[^.]+}_alt-presence.alt_calls.ML_set.tsv"
+    threads: 2
+    shell:
+        '''
+        awk 'function decode_phred(phred) {{ return 10^(-phred/10) }} \
+            BEGIN {{ OFS="\\t"; ORS=""; }} \
+            NR==1  {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }} \
+            NR!=1 {{ prob_alt = decode_phred( $(f["PROB_ALT"]) ); \
+                if (prob_alt > 0.5) \
+                    {{ alt_status = "ALT" }} \
+                else {{ alt_status = "REF" }}; \
+                print $(f["CHROM"]),$(f["POS"]),alt_status; print "\\n" \
+            }}' {input} > {output}
+        '''
+
+
+rule sciphi_true_false_pos_neg_calculations_alt_presence_alt_calls:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls =
+            "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.alt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference,[^/]+}/sciphi/{run}/fdr_alt-presence/{sc,[^.]+}.{batch,[^.]+}.{extra_options,(|[^/]+)}sciphi.alt_prob.fdr_{fdr,[^.]+}_alt-presence.alt_calls.positives_negatives.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.alt_calls.ML_set.log"
+    threads: 1
+    resources:
+        mem_gb = 20 
+    shell:
+        "Rscript --vanilla " + include_prefix + "scripts/prosolo.P-N_stats.alt_calls.ground_truth.R "
+        " --gt {input.ground_truth} "
+        " --calls {input.calls} "
+        " --out {output} "
+        " 2>&1 | tee {log} "
+
+rule sciphi_true_false_calcs_alt_pres_gt_spec_min_sc_cov_awk_alt_calls:
+    input:
+        ground_truth = lambda wc: config["references"][wc.ground_truth],
+        calls =
+            "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.alt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{ground_truth}.{extra_options,(|[^/]+)}sciphi.alt_prob.fdr_{fdr}_alt-presence.alt_calls.awk_positives_negatives.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/sciphi/{run}/fdr_alt-presence/{sc}.{batch}.{ground_truth}.{extra_options}sciphi.alt_prob.fdr_{fdr}_alt-presence.alt_calls.awk_positives_negatives.ML_set.log"
+    conda:
+        "envs/gawk.yaml"
+    threads: 1
+    resources:
+        mem_gb = 5
+    shell:
+        '''
+        awk \
+        'BEGIN {{ 
+          FS = "\\t"; 
+          OFS = "\\t"; 
+          SUBSEP = ":";
+          alts["0/1"] = 1; 
+          alts["1/1"] = 1; 
+          refs["0/0"] = 1; 
+          tp = 0;
+          fp = 0;
+          fn = 0;
+          tn = 0;
+          p_not_called = 0;
+          n_not_called = 0;
+          no_ground_truth = 0;
+        }} 
+        {{
+          if ( NR == FNR ) {{ 
+            if ( ($1, $2) in calls ) {{ 
+              if ( $3 == "ALT" ) {{ calls[$1,$2] = $3 }} 
+            }} 
+            else {{ 
+              n_calls += 1; 
+              calls[$1, $2] = $3; 
+            }} 
+          }} 
+          else {{ 
+            if ( ($1, $2) in calls ) {{
+              n_gt += 1;
+              if ( calls[$1, $2] == "ALT" ) {{ 
+                if ( $3 in alts ) {{ tp += 1; }} 
+                else {{ 
+                  if ( $3 in refs ) {{ fp += 1; }} 
+                }} 
+              }} 
+              else {{ 
+                if ( calls[$1, $2] == "REF" ) {{ 
+                  if ( $3 in alts ) {{ fn += 1; }} 
+                  else {{ 
+                    if ( $3 in refs ) {{ tn += 1; }} 
+                  }} 
+                }} 
+              }} 
+            }} 
+            else {{ 
+              if ( $3 in alts ) {{ p_not_called += 1; }} 
+              if ( $3 in refs ) {{ n_not_called += 1; }} 
+            }} 
+          }} 
+        }}
+        END {{ 
+          no_ground_truth = n_calls - n_gt;
+          print "TP", "FP", "FN", "TN", "P_not_called", "N_not_called", "no_ground_truth";
+          print tp, fp, fn, tn, p_not_called, n_not_called, no_ground_truth;
+        }}' \
+         {input.calls} <( zcat {input.ground_truth} ) \
+         >{output} \
+         2>&1 | tee {log}
+        '''
+
+
 
 
 rule sciphi_cell_to_tsv:

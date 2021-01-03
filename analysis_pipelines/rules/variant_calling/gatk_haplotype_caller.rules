@@ -45,8 +45,8 @@ rule gatk_haplotype_caller_per_sample_per_chr:
         bam = "mapping/{reference}/samples/{sample}.bps.sorted.bam",
         bai = "mapping/{reference}/samples/{sample}.bps.sorted.bam.bai"
     output:
-        gvcf = tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
-        idx = tmp + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx"
+        gvcf = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf",
+        idx = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/{sample}.{chr}.hc.g.vcf.idx"
     params:
         custom = config["settings"]["gatk"].setdefault("params", "") +
                  config["settings"]["gatk"].setdefault("HaplotypeCaller", "") +
@@ -55,10 +55,11 @@ rule gatk_haplotype_caller_per_sample_per_chr:
     log:
         "log/variant_calling/{reference}/{sample}.{chr}.gatk_HaplotypeCaller.log"
     threads: 2  # haplotype caller currently does not reliably use more than 2 threads
-    resources: mem_gb=2
+    resources:
+        mem_gb=11
     shell:
         "mkdir -p variant_calling/{wildcards.reference}; "
-        "gatk -T HaplotypeCaller "
+        "gatk -Xmx5g -Xms1g -T HaplotypeCaller "
         "-I {input.bam} "
         "--intervals {wildcards.chr} "
         "-R {input.ref} "

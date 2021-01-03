@@ -1,0 +1,189 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+
+"""
+Using scvilp installed via conda in the environment defined by envs/scvilp.yaml.
+"""
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+import os.path as path
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+rule scvilp_loci_identify_default_per_chr:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch}.{chrom}.mpileup"
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference,[^/]+}/scvilp/default/{batch,[^.]+}.{chrom,chr(?:\d{1,2}|[XYM])}.{mode}.scvilp_loci.mpileup"
+    log:
+        "log/variant_calling/{reference}/scvilp/default/{batch}.{chrom}.{mode}.scvilp_loci.log"
+    threads: 2 
+    resources:
+        mem_gb = 8
+    conda: "envs/scvilp.yaml"
+    shell:
+        "python ../scripts/scVILP/scripts/loci_identify.py "
+        " -in {input.mpileup} "
+        " -out {output} "
+        " -names {input.filenames} "
+        " -ms 2 "
+        " -nmc 3 "
+        " 2>&1 | tee {log}"
+
+rule scvilp_loci_identify_sensitive_per_chr:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/sciphi/{batch}.{chrom}.mpileup"
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference,[^/]+}/scvilp/sensitive/{batch,[^.]+}.{chrom,chr(?:\d{1,2}|[XYM])}.{mode}.scvilp_loci.mpileup"
+    log:
+        "log/variant_calling/{reference}/scvilp/sensitive/{batch}.{chrom}.{mode}.scvilp_loci.log"
+    threads: 2 
+    resources:
+        mem_gb = 8
+    conda: "envs/scvilp.yaml"
+    shell:
+        "python ../scripts/scVILP/scripts/loci_identify.py "
+        " -in {input.mpileup} "
+        " -out {output} "
+        " -names {input.filenames} "
+        " -ms 1 "
+        " -nmc 1 "
+        " 2>&1 | tee {log}"
+
+
+rule combine_scvilp_chr_mpileups:
+    input:
+        lambda w: expand( tmp + "/" + config["project_name"] + "/variant_calling/{reference}/scvilp/{mode}/{batch}.{chrom}.{mode}.scvilp_loci.mpileup",
+            reference = w.reference,
+            batch = w.batch,
+            mode = w.mode,
+            chrom = chrlist
+            )
+    output:
+        tmp + "/" + config["project_name"] + "/variant_calling/{reference}/scvilp/{mode}/{batch,[^.]+}.{mode}.scvilp_loci.mpileup"
+    log:
+        "logs/variant_calling/{reference}/scvilp/{mode}/{batch,[^.]+}.{mode}.scvilp_loci.log"
+    shell:
+        'cat {input} > {output} 2>{log}'
+
+
+rule scvilp_main_default:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/scvilp/default/{batch}.default.scvilp_loci.mpileup"
+    output:
+        vcf = "variant_calling/{reference}/scvilp/default/{batch}.default.scvilp.vcf",
+        nex = "variant_calling/{reference}/scvilp/default/{batch}.default.scvilp.nex"
+    params:
+        out_dir = lambda w, output: path.dirname(output.vcf)
+    log:
+        "log/variant_calling/{reference}/scvilp/default/{batch}.default.scvilp_main.log"
+    threads: 1 
+    benchmark:
+        "benchmarks/{reference}/scvilp/{batch}.default.scvilp_main.benchmark.txt"
+    resources:
+        mem_gb = 1200
+    conda: "envs/scvilp.yaml"
+    shell:
+        "(python ../scripts/scVILP/scripts/scVILP_main.py "
+        "  -in {input.mpileup} "
+        "  -out {params.out_dir} "
+        "  -names {input.filenames}; "
+        " mv {params.out_dir}/snv.vcf {output.vcf}; "
+        " mv {params.out_dir}/phylogeny.nex {output.nex};) "
+        " 2>&1 | tee {log}"
+
+
+rule scvilp_main_sensitive:
+    input:
+        filenames = "variant_calling/{reference}/sciphi/{batch}.filenames.txt",
+        mpileup = tmp + "/" + config["project_name"] + "/variant_calling/{reference}/scvilp/sensitive/{batch}.sensitive.scvilp_loci.mpileup"
+    output:
+        vcf = "variant_calling/{reference}/scvilp/sensitive/{batch}.sensitive.scvilp.vcf",
+        nex = "variant_calling/{reference}/scvilp/sensitive/{batch}.sensitive.scvilp.nex"
+    params:
+        out_dir = lambda w, output: path.dirname(output.vcf)
+    log:
+        "log/variant_calling/{reference}/scvilp/sensitive/{batch}.sensitive.scvilp_main.log"
+    threads: 1 
+    benchmark:
+        "benchmarks/{reference}/scvilp/{batch}.sensitive.scvilp_main.benchmark.txt"
+    resources:
+        mem_gb = 1200
+    conda: "envs/scvilp.yaml"
+    shell:
+        "(python ../scripts/scVILP/scripts/scVILP_main.py "
+        "  -in {input.mpileup} "
+        "  -out {params.out_dir} "
+        "  -mdthr 1 "
+        "  -names {input.filenames}; "
+        " mv {params.out_dir}/snv.vcf {output.vcf}; "
+        " mv {params.out_dir}/phylogeny.nex {output.nex};) "
+        " 2>&1 | tee {log}"
+
+
+rule bcftools_bcf_scvilp:
+    input:
+        "variant_calling/{reference}/scvilp/{mode}/{batch}.{mode}.scvilp.vcf",
+    output:
+        bcf = "variant_calling/{reference}/scvilp/{mode}/{batch}.{mode}.scvilp.bcf"
+    log:
+        "log/variant_calling/{reference}/scvilp/{mode}/{batch}.{mode}.scvilp_to_bcf_index.log"
+    conda: "envs/bcftools-1-10.yaml"
+    shell:
+        "bcftools view -O b -o {output.bcf} {input} 2>{log}"
+
+
+rule bcftools_split_scvilp_by_cell:
+    input:
+        bcf = "variant_calling/{reference}/scvilp/{mode}/{batch}.{mode}.scvilp.bcf",
+        idx = "variant_calling/{reference}/scvilp/{mode}/{batch}.{mode}.scvilp.bcf.csi"
+    output:
+        "variant_calling/{reference}/scvilp/{mode}/{sc,[^.]+}.{batch,[^.]+}.{mode}.scvilp.bcf"
+    log:
+        "log/variant_calling/{reference}/scvilp/{mode}/scvilp_split_cells/{sc}.{batch}.{mode}.scvilp.split.log"
+    conda: "envs/bcftools-1-10.yaml"
+    shell:
+        "bcftools view --samples {wildcards.sc}.bps.sorted.bam --trim-alt-alleles -O b -o {output} {input.bcf}"
+
+
+rule scvilp_cell_to_tsv:
+    input:
+        "variant_calling/{reference}/scvilp/{mode}/{sc}.{batch}.{mode}.scvilp.bcf"
+    output:
+        "variant_calling/{reference}/scvilp/{mode}/{sc,[^.]+}.{batch,[^.]+}.{mode}.scvilp.tsv"
+    log:
+        "log/variant_calling/{reference}/scvilp/{mode}/{sc}.{batch}.{mode}.scvilp_to_tsv.log"
+    conda: "envs/bcftools-1-10.yaml"
+    shell:
+        "bcftools view -h {input} | grep ^#CHROM | cut -f 1,2,4,5,10- | cut -c2- | "
+        " sed -e 's/\.bps\.sorted\.bam//g' > {output}; "
+        "bcftools norm --multiallelic -any -O u {input} | "
+        "bcftools view -O u --types snps -e 'STRLEN(REF)>1||STRLEN(ALT)>1' | "
+        "bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n' >> {output} "
+
+
+rule scvilp_true_false_pos_neg_calculations:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls = "variant_calling/{reference}/scvilp/{mode}/{sc}.{batch}.{mode}.scvilp.tsv"
+    output:
+        "variant_calling/{reference,[^/]+}/scvilp/{mode}/{sc,[^.]+}.{batch,[^.]+}.{mode}.scvilp.positives_negatives.tsv"
+    log:
+        "log/variant_calling/{reference}/scvilp/{mode}/{sc}.{batch}.{mode}.scvilp.positives_negatives.log"
+    resources:
+        mem_gb = 20
+    shell:
+        "Rscript --vanilla " + include_prefix + "scripts/monovar.P-N_stats.alt-calling.R "
+        " --gt {input.ground_truth} "
+        " --calls {input.calls} "
+        " --out {output} "
+        " 2>&1 | tee {log} "
+

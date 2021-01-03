@@ -191,6 +191,106 @@ rule bulk_ground_truth_to_tsv_gz:
         "( bcftools query -f '%CHROM\t%POS[\t%GT]\n' {input} | gzip --stdout >> {output} ) 2>> {log}"
 
 
+rule bulk_ground_truth_tsv_gz_remove_somatic:
+    input:
+        somatics = config["references"].get("somatic", ""),
+        ground_truth = "variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.tsv.gz",
+    output:
+        "variant_calling/{reference}/{sample,[^\.]+}.bulk.ground_truth{filter, (\.minGQ_30|)}.somatics_removed.tsv.gz"
+    log:
+        "log/variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.somatics_removed.log"
+    conda:
+        "envs/gawk.yaml"
+    shell:
+        '''
+        (awk \
+         'function gt_to_somatic(gt) {{ 
+            if ( gt == "0/0" ) {{
+              return "ref"
+            }} else if (gt == "0/1") {{
+              return "het"
+            }} else if (gt == "1/1") {{
+              return "hom"
+            }}
+          }}
+          BEGIN {{ 
+           FS = "\\t"; 
+           OFS = "\\t"; 
+         }} 
+         {{
+           if ( NR == FNR ) {{ 
+             vars[$2,$3] = $8;
+           }} else {{
+             if ( !( ( ($1,$2) in vars ) && ( vars[$1,$2] == gt_to_somatic($3) ) ) ) {{
+               print $0
+             }}
+           }}
+         }}' \
+         {input.somatics} <( zcat {input.ground_truth} ) \
+          | gzip --stdout >{output} ) \
+          2>&1 | tee {log}
+        '''
+
+
+rule bulk_ground_truth_tsv_gz_add_somatic:
+    input:
+        somatics = config["references"].get("somatic", ""),
+        ground_truth = "variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.tsv.gz",
+    output:
+        "variant_calling/{reference}/{sample,[^\.]+}.bulk.ground_truth{filter, (\.minGQ_30|)}.somatics_added.tsv.gz"
+    log:
+        "log/variant_calling/{reference}/{sample}.bulk.ground_truth{filter}.somatics_added.log"
+    conda:
+        "envs/gawk.yaml"
+    shell:
+        '''
+        (awk \
+         'function somatic_to_gt(somatic) {{ 
+            if ( somatic == "het" ) {{
+              return "0/1"
+            }} else if (somatic == "hom") {{
+              return "1/1"
+            }}
+          }}
+          BEGIN {{ 
+           FS = "\\t"; 
+           OFS = "\\t"; 
+           file = 1;
+           SUBSEP = "\\t";
+         }} 
+         {{
+           if ( NR == FNR ) {{ 
+             if ( $1 == "clonal" ) {{
+               clonals[$2,$3] = somatic_to_gt($8);
+             }} else if ( $1 == "subclonal" ) {{
+               subclonals[$2,$3] = somatic_to_gt($8);
+             }}
+           }} else {{
+             if (($1,$2) in clonals ) {{
+               if ( clonals[$1,$2] == $3 ) {{
+                 print $0;
+               }} else {{
+                 print $1,$2,clonals[$1,$2];
+               }} 
+               delete clonals[$1,$2];
+             }} else if ( ($1,$2) in subclonals ) {{
+             }} else {{
+               print $0
+             }}
+           }}
+         }}
+         END {{
+           for ( coord in clonals ) {{
+             print coord,clonals[coord];
+           }}
+         }}' \
+         {input.somatics} \
+         <( zcat {input.ground_truth} ) \
+          | gzip --stdout >{output} ) \
+          2>&1 | tee {log}
+        '''
+
+
 rule Hoell_ground_truth_to_het_snps_only:
     input:
         ground_truth = config["references"]["ground_truth_bcf"],

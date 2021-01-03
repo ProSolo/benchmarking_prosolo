@@ -354,10 +354,12 @@ rule trimmomatic_Qual_SE:
     params: str = config["settings"]["trimmomatic"]["crop"] +
                   config["settings"]["trimmomatic"]["quality"] +
                   config["settings"]["trimmomatic"]["minlen"]
+    resources:
+        mem_gb=3
     threads: 3  # from looking at trimmomatic working, it doesn't seem
                 # to fully exploit more than 2 cpus at a time, anyways
     shell:
-        "trimmomatic SE -threads {threads} -phred33 {input} {output} {params.str} 2>&1 | tee {log}"
+        "trimmomatic SE -Xms1g -Xmx{resources.mem_gb}g -threads {threads} -phred33 {input} {output} {params.str} 2>&1 | tee {log}"
 
 
 rule trimmomatic_IlluminaQual_PE:
@@ -433,6 +435,25 @@ rule merge_trimmomatic_PE:
         "mapping/{reference}/runs/{run,[^.]+}.map.sorted.bam"
     shell:
         "samtools merge -cp {output} {input}"
+
+
+rule bam_sort_trimmomatic_SE:
+    input:
+        "mapping/{reference}/runs/{run}.SE.map.bam"
+    output:
+        "mapping/{reference}/runs/{run}.SE.map.sorted.bam"
+    threads: 3
+    params:
+        threads=2 # must be threads - 1
+    resources:
+        mem_gb=3 # must be threads in gb
+    shell:
+        """
+        TMP_PRE="mapping/{wildcards.reference}/runs/{wildcards.run}.SE"
+        mkdir -p {tmp}/bam_sort/${{TMP_PRE%/*}}
+        samtools sort -@ {params.threads} -T {tmp}/bam_sort/$TMP_PRE -o {output} {input}
+        """
+
 
 rule merge_trimmomatic_SE:
     """

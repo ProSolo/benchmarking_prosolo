@@ -48,6 +48,9 @@ def _get_GATKBundle(wildcards):
 
 
 def _get_recal_params(wildcards):
+    breadth = config["sample_annotations"][wildcards.unit].get("library_selection", "")
+    if not breadth:
+        breadth = config["sample_annotations"][wildcards.unit].get("library_prep", "")
     if wildcards.type == "snp":
         resources = (
             "-resource:hapmap,known=false,training=true,truth=true,prior=15.0 {0}/{hapmap} "
@@ -62,9 +65,9 @@ def _get_recal_params(wildcards):
                     "-an SOR "
                     "-an MQRankSum "
                     "-an ReadPosRankSum ")
-        if config["sample_annotations"][wildcards.unit]["library_prep"] == "WX":
+        if breadth == "WXS" or breadth == "WX":
             parameters = base_snps 
-        elif config["sample_annotations"][wildcards.unit]["library_prep"] == "WGS":
+        elif breadth == "WGS":
             parameters = (base_snps + "-an DP ")
     elif wildcards.type == "indel":
         resources = (
@@ -77,9 +80,9 @@ def _get_recal_params(wildcards):
                         "-an SOR "
                         "-an MQRankSum "
                         "-an ReadPosRankSum ")
-        if config["sample_annotations"][wildcards.unit]["library_prep"] == "WX":
+        if breadth == "WXS" or breadth == "WX":
             parameters = base_indels
-        elif config["sample_annotations"][wildcards.unit]["library_prep"] == "WGS":
+        elif breadth == "WGS":
             parameters = (base_indels + "-an DP ")
     return resources + parameters
 
@@ -103,9 +106,9 @@ rule gatk_variant_recalibration:
         "log/variant_calling/{reference}/{unit}{extra}.{type}_recalibrate_info.log"
     threads: 8
     resources:
-        mem_gb = 4
+        mem_gb=11
     shell:
-        "gatk -Xmx{resources.mem_gb}g -T VariantRecalibrator -R {input.ref} "
+        "gatk -Xmx5g -Xms1g  -T VariantRecalibrator -R {input.ref} "
         "-input {input.vcf} "
         "{params} -nt {threads} "
         "-tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 90.0 "
@@ -130,9 +133,9 @@ rule gatk_apply_variant_recalibration:
         "log/variant_calling/{reference}/{sample}{extra}.{type}_recalibrate.log"
     threads: 8
     resources:
-        mem_gb = 4
+        mem_gb=11
     shell:
-        "gatk -Xmx{resources.mem_gb}g -T ApplyRecalibration -R {input.ref} -nt {threads} "
+        "gatk -Xmx5g -Xms1g -T ApplyRecalibration -R {input.ref} -nt {threads} "
         "-input {input.vcf} -mode {params.mode} {params.custom} "
         "-recalFile {input.recal} --ts_filter_level 99.9 "
         "-tranchesFile {input.tranches} -o {output} "

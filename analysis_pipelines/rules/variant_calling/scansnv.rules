@@ -1,0 +1,50 @@
+# vim: syntax=python tabstop=4 expandtab
+# coding: utf-8
+
+"""
+ProSolo variant calling for single cell data with a bulk backgroun
+"""
+
+
+__author__ = "David Laehnemann (david.laehnemann@hhu.de)"
+__license__ = "MIT"
+
+def _get_ref(wildcards):
+    return config["references"][wildcards.reference]
+
+
+def _sample_to_runs(sample):
+    return config["samples"][sample]
+
+# get chromosome file if defined in config.json, set to undefined otherwise
+# the file should contain the name of one chromosome per line
+chrfile = config["references"].get("chromosomes","undefined")
+if chrfile == "undefined":
+    chrlist = ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7',
+               'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14',
+               'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr20', 'chr21',
+               'chr22', 'chrX']
+else:
+    chrlist = open(chrfile).read().splitlines()
+
+
+## rules to calculate scansnv false positives and negatives of alternative allele calling against provided ground truth genotypes
+
+rule scansnv_true_false_pos_neg_calculations_alt_presence_min_sc_cov:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls =
+        "../SCANSNV/" + config["data_set"] + /variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.positives_negatives.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.positives_negatives.ML_set.log"
+    resources:
+        mem_gb = 10
+    shell:
+        "Rscript --vanilla " + include_prefix + "scripts/prosolo.P-N_stats.alt-calling.R "
+        " --gt {input.ground_truth} "
+        " --calls {input.calls} "
+        " --out {output} "
+        " 2>&1 | tee {log} "
+

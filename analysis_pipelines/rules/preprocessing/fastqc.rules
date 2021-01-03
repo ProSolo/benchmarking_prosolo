@@ -17,6 +17,8 @@ rule fastqc:
     output:
         "preprocessing/runs/fastqc/{run,[^.]+}{rest}_fastqc.zip",
         "preprocessing/runs/fastqc/{run,[^.]+}{rest}_fastqc.html"
+    resources:
+        mem_gb=5
     shell:
         """
         fastqc -o preprocessing/runs/fastqc --nogroup {input}

@@ -37,6 +37,15 @@ rule bam_index:
         "samtools index {input}"
 
 
+rule bam_subsample:
+    input:
+        "mapping/{reference}/{sample}.bps.sorted.bam"
+    output:
+        "mapping/{reference}/{sample}_{percent}-percent_seed-{seed}.bps.sorted.bam"
+    shell:
+        "samtools view -s {wildcards.seed}.{wildcards.percent} -O BAM -o {output} {input}"
+
+
 #rule bam_sort:
 #    input:
 #        "{prefix}.bam"
@@ -85,7 +94,7 @@ rule sample_merge:
             "mapping/{reference}/runs/{run}.bpr.sorted.bam",
             reference = wildcards.reference, run=config["samples"][wildcards.sample])
     output:
-        "mapping/{reference}/samples/{sample,[^/.]+}.bpr.sorted.bam"
+        "mapping/{reference}/samples/{sample,[^/._]+}.bpr.sorted.bam"
     threads: 1
     run:
         if len(input) > 1:

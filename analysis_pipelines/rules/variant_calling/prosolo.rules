@@ -62,7 +62,9 @@ rule generate_candidates_bcftools_alt_sites_only_per_chr:
     input:
         ref = _get_ref,
         sc = "mapping/{reference}/samples/{sc}.bps.sorted.bam",
-        blk = "mapping/{reference}/samples/{blk}.bps.sorted.bam"
+        sc_idx = "mapping/{reference}/samples/{sc}.bps.sorted.bam.bai",
+        blk = "mapping/{reference}/samples/{blk}.bps.sorted.bam",
+        blk_idx = "mapping/{reference}/samples/{blk}.bps.sorted.bam.bai"
     output:
         "variant_calling/{reference,[^/]+}/prosolo/{sc}.{blk}.prosolo_candidates.alt_sites_only.{chrom}.bcf"
     log:
@@ -98,8 +100,12 @@ rule prosolo:
         blk_index = "mapping/{reference}/samples/{blk}.bps.sorted.bam.bai",
     output:
         bcf = tmp + "/" + config["project_name"] + "/variant_calling/{reference,[^/]+}/prosolo/{sc}.{blk}.{candidates_type}.{chrom}:{region}.prosolo.bcf"
+    resources:
+        mem_gb=3
     log:
         "log/variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type}.{chrom}:{region}.prosolo.log"
+    benchmark:
+        "benchmark/variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type}.{chrom}:{region}.prosolo.tsv"
     shell:
         '''
         prosolo single-cell-bulk --omit-indels \
@@ -182,6 +188,10 @@ rule prosolo_min_sc_cov_bcf:
         "variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.prosolo.min_sc_cov_{min_sc_cov,\d+}.bcf"
     log:
         "log/variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type}.prosolo.min_sc_cov_{min_sc_cov}.log"
+    resources:
+        mem_gb=11
+    conda:
+        "envs/bcftools-1-10.yaml"
     shell:
         '''
         bcftools norm \
@@ -218,10 +228,12 @@ rule prosolo_fdr_alt_presence:
     input:
         bcf = "variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type}.prosolo{min_sc_cov}.bcf"
     output:
-        bcf = "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr,[^.]+}_alt-presence.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.bcf",
+        bcf = "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc,[^.]+}.{blk,[^.]+}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr,[^.]+}_alt-presence.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.bcf",
     log:
         "log/variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.log"
     params: fdr = lambda wildcards: wildcards.fdr.replace('-','.')
+    resources:
+        mem_gb=3
     shell:
         'prosolo control-fdr '
         ' {input.bcf} '
@@ -295,6 +307,151 @@ rule prosolo_fdr_to_tsv:
         }}' \
         > {output}
         '''
+
+rule prosolo_tsv_to_alt_calls:
+    input:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.alt_calls.ML_set.tsv"
+    threads: 2
+    shell:
+        '''
+        awk 'function decode_phred(phred) {{ return 10^(-phred/10) }} \
+            BEGIN {{ OFS="\\t"; ORS=""; }} \
+            NR==1  {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }} \
+            NR!=1 {{ prob_ref_set = decode_phred( $(f["PROB_HOM_REF"]) ) + decode_phred($(f["PROB_ERR_ALT"]) ); \
+                prob_alt_set = decode_phred( $(f["PROB_HOM_ALT"]) ) + decode_phred($(f["PROB_ERR_REF"]) ) + decode_phred($(f["PROB_HET"]) ) + decode_phred($(f["PROB_ADO_TO_ALT"]) ) + decode_phred($(f["PROB_ADO_TO_REF"]) ); \
+                if (prob_ref_set < prob_alt_set) \
+                    {{ alt_status = "ALT" }} \
+                else {{ alt_status = "REF" }}; \
+                print $(f["CHROM"]),$(f["POS"]),alt_status; print "\\n" \
+            }}' {input} > {output}
+        '''
+
+rule prosolo_tsv_to_gt:
+    input:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.genotypes.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.genotypes.ML_set.log"
+    threads: 1
+    shell:
+        '''
+        (awk 'function decode_phred(phred) {{ return 10^(-phred/10) }} \
+            BEGIN {{ OFS="\\t"; ORS=""; }} \
+            NR==1  {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }} \
+            NR!=1 {{ \
+                prob_hom_ref_set = decode_phred( $(f["PROB_HOM_REF"]) ) + decode_phred($(f["PROB_ERR_ALT"]) ); \
+                prob_hom_alt_set = decode_phred( $(f["PROB_HOM_ALT"]) ) + decode_phred($(f["PROB_ERR_REF"]) ); \
+                prob_het_set = decode_phred($(f["PROB_HET"]) ) + decode_phred($(f["PROB_ADO_TO_ALT"]) ) + decode_phred($(f["PROB_ADO_TO_REF"]) ); \
+                if ( (prob_het_set >= prob_hom_ref_set) && (prob_het_set >= prob_hom_alt_set) ) \
+                    {{ genotype = "het" }} \
+                else {{ \
+                    if (prob_hom_alt_set >= prob_hom_ref_set) \
+                        {{ genotype = "hom" }} \
+                    else {{ genotype = "ref" }} \
+                }}; \
+                print $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]),genotype; print "\\n" \
+            }}' {input} > {output}
+        ) 2>{log}
+        '''
+
+rule prosolo_tsv_to_gt_calls:
+    input:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/som_gt_recall/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.gt_calls.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_{event_set}/som_gt_recall/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.gt_calls.ML_set.log"
+    threads: 1
+    shell:
+        '''
+        (awk 'function decode_phred(phred) {{ return 10^(-phred/10) }} \
+            BEGIN {{
+                OFS="\\t";
+                ORS="";
+                print "CHROM","POS","REF","ALT","GT" "\\n"
+            }}
+            NR==1  {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }}
+            NR!=1 {{
+                prob_hom_ref_set = decode_phred( $(f["PROB_HOM_REF"]) ) + decode_phred($(f["PROB_ERR_ALT"]) );
+                prob_hom_alt_set = decode_phred( $(f["PROB_HOM_ALT"]) ) + decode_phred($(f["PROB_ERR_REF"]) );
+                prob_het_set = decode_phred($(f["PROB_HET"]) ) + decode_phred($(f["PROB_ADO_TO_ALT"]) ) + decode_phred($(f["PROB_ADO_TO_REF"]) );
+                if ( (prob_het_set >= prob_hom_ref_set) && (prob_het_set >= prob_hom_alt_set) )
+                    {{ genotype = "0/1" }}
+                else {{
+                    if (prob_hom_alt_set >= prob_hom_ref_set)
+                        {{ genotype = "1/1" }}
+                    else {{ genotype = "0/0" }}
+                }};
+                print $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]),genotype; print "\\n"
+            }}' {input} > {output}
+        ) 2>{log}
+        '''
+
+rule prosolo_validated_somatic_recall:
+    input:
+        somatics = config["references"]["somatic"],
+        prosolo = "variant_calling/{reference}/prosolo/fdr_{event_set}/som_gt_recall/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.gt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_{event_set}/som_gt_recall/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.gt_calls.ML_set.somatic_genotype_recall.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_{event_set}/som_gt_recall/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.gt_calls.ML_set.somatic_genotype_recall.log"
+    resources:
+        mem_gb = 5
+    shell:
+        '''
+        (awk 'function str_to_gt(str) {{
+              if ( str == "het" ) {{
+                return "0/1"
+              }} else if ( str == "hom" ) {{
+                return "1/1"
+              }}
+            }}
+            BEGIN {{
+              OFS="\\t";
+              ORS="";
+              SUBSEP = ":";
+              gt_status = "FN";
+              alt_status = "FN";
+              print "CHROM","POS","REF","ALT","GT","GT_CALL","ALT_PRES_CALL","CLONALITY" "\\n";
+            }}
+            {{
+              if ( FNR==1 ) {{ for (i=1; i<=NF; i++) {{ f[$i] = i }} }}
+              if ( NR == FNR ) {{ 
+                if ( FNR!=1 ) {{
+                  genotype[ $(f["chrom"]),$(f["pos"]),$(f["REF"]),$(f["VAR"]) ] = str_to_gt( $(f["zygosity"]) );
+                  clonality[ $(f["chrom"]),$(f["pos"]),$(f["REF"]),$(f["VAR"]) ] = $(f["class"]);
+                }}
+              }} else {{
+                if (FNR!=1) {{
+                  gt = genotype[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
+                  if ( gt != "" ) {{
+                    clon = clonality[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
+                    if ( $(f["GT"]) == "0/0" ) {{
+                        alt_status = "FN";
+                        gt_status = "FN";
+                    }} else if ( $(f["GT"]) == "0/1" || $(f["GT"]) == "1/1" ) {{
+                      alt_status = "TP";
+                      if ( $(f["GT"]) == gt ) {{
+                        gt_status = "TP";
+                      }} else {{
+                        gt_status = "FN";
+                      }}
+                    }} else {{
+                        alt_status = "FN";
+                        gt_status = "FN";
+                        print "UNKNOWN_GENOTYPE:",$(f["GT"]) "\\n";
+                    }}
+                    print $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]),gt,gt_status,alt_status,clon "\\n";
+                  }}
+                }}
+              }}
+            }}' {input.somatics} {input.prosolo} > {output}
+        ) 2>{log}
+        '''
+
 
 
 rule prosolo_to_ground_truth_hets_only_tsv:
@@ -395,7 +552,7 @@ rule prosolo_min_sc_cov_event_rate_expectation:
     log:
         "log/variant_calling/{reference}/prosolo/{event_set}-rate/{sc}.{blk}.{candidates_type}.prosolo.min_sc_cov_{min_sc_cov}{minGQ}{ground_truth}.expected-{event_set}-rate.log"
     resources:
-        mem_gb = 10
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.expected-{wildcards.event_set}.R "
         " --calls {input.calls} "
@@ -416,13 +573,186 @@ rule prosolo_true_false_pos_neg_calculations_alt_presence_min_sc_cov:
     log:
         "log/variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.positives_negatives.ML_set.log"
     resources:
-        mem_gb = 10
+        mem_gb = 30
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.P-N_stats.alt-calling.R "
         " --gt {input.ground_truth} "
         " --calls {input.calls} "
         " --out {output} "
         " 2>&1 | tee {log} "
+
+rule prosolo_true_false_pos_neg_calculations_alt_presence_min_sc_cov_alt_calls:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls =
+        "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.alt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.alt_calls.positives_negatives.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.alt_calls.positives_negatives.ML_set.log"
+    threads: 2
+    resources:
+        mem_gb = 20
+    shell:
+        "Rscript --vanilla " + include_prefix + "scripts/prosolo.P-N_stats.alt_calls.ground_truth.R "
+        " --gt {input.ground_truth} "
+        " --calls {input.calls} "
+        " --out {output} "
+        " 2>&1 | tee {log} "
+
+rule prosolo_true_false_pos_neg_calculations_alt_presence_min_sc_cov_awk_alt_calls:
+    input:
+        ground_truth = config["references"]["ground_truth"],
+        calls =
+        "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.alt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.alt_calls.awk_positives_negatives.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.alt_calls.positives_negatives.ML_set.log"
+    conda:
+        "envs/gawk.yaml"
+    threads: 2
+    resources:
+        mem_gb = 5
+    shell:
+        '''
+        awk \
+        'BEGIN {{ 
+          FS = "\\t"; 
+          OFS = "\\t"; 
+          SUBSEP = ":";
+          alts["0/1"] = 1; 
+          alts["1/1"] = 1; 
+          refs["0/0"] = 1; 
+          tp = 0;
+          fp = 0;
+          fn = 0;
+          tn = 0;
+          p_not_called = 0;
+          n_not_called = 0;
+          no_ground_truth = 0;
+        }} 
+        {{
+          if ( NR == FNR ) {{ 
+            if ( ($1, $2) in calls ) {{ 
+              if ( $3 == "ALT" ) {{ calls[$1,$2] = $3 }} 
+            }} 
+            else {{ 
+              n_calls += 1; 
+              calls[$1, $2] = $3; 
+            }} 
+          }} 
+          else {{ 
+            if ( ($1, $2) in calls ) {{
+              n_gt += 1;
+              if ( calls[$1, $2] == "ALT" ) {{ 
+                if ( $3 in alts ) {{ tp += 1; }} 
+                else {{ 
+                  if ( $3 in refs ) {{ fp += 1; }} 
+                }} 
+              }} 
+              else {{ 
+                if ( calls[$1, $2] == "REF" ) {{ 
+                  if ( $3 in alts ) {{ fn += 1; }} 
+                  else {{ 
+                    if ( $3 in refs ) {{ tn += 1; }} 
+                  }} 
+                }} 
+              }} 
+            }} 
+            else {{ 
+              if ( $3 in alts ) {{ p_not_called += 1; }} 
+              if ( $3 in refs ) {{ n_not_called += 1; }} 
+            }} 
+          }} 
+        }}
+        END {{ 
+          no_ground_truth = n_calls - n_gt;
+          print "TP", "FP", "FN", "TN", "P_not_called", "N_not_called", "no_ground_truth";
+          print tp, fp, fn, tn, p_not_called, n_not_called, no_ground_truth;
+        }}' \
+         {input.calls} <( zcat {input.ground_truth} ) \
+         >{output} \
+         2>&1 | tee {log}
+        '''
+
+rule prosolo_true_false_calcs_alt_pres_gt_spec_min_sc_cov_awk_alt_calls:
+    input:
+        ground_truth = lambda wc: config["references"][wc.ground_truth],
+        calls =
+            "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.alt_calls.ML_set.tsv"
+    output:
+        "variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{ground_truth}.{candidates_type,(with_hom_ref_sites|alt_sites_only)}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov,(\.min_sc_cov_\d+|)}.alt_calls.awk_positives_negatives.ML_set.tsv"
+    log:
+        "log/variant_calling/{reference}/prosolo/fdr_alt-presence/{sc}.{blk}.{ground_truth}.{candidates_type}.fdr_{fdr}_alt-presence.prosolo{min_sc_cov}.alt_calls.positives_negatives.ML_set.log"
+    conda:
+        "envs/gawk.yaml"
+    threads: 2
+    resources:
+        mem_gb = 5
+    shell:
+        '''
+        awk \
+        'BEGIN {{ 
+          FS = "\\t"; 
+          OFS = "\\t"; 
+          SUBSEP = ":";
+          alts["0/1"] = 1; 
+          alts["1/1"] = 1; 
+          refs["0/0"] = 1; 
+          tp = 0;
+          fp = 0;
+          fn = 0;
+          tn = 0;
+          p_not_called = 0;
+          n_not_called = 0;
+          no_ground_truth = 0;
+        }} 
+        {{
+          if ( NR == FNR ) {{ 
+            if ( ($1, $2) in calls ) {{ 
+              if ( $3 == "ALT" ) {{ calls[$1,$2] = $3 }} 
+            }} 
+            else {{ 
+              n_calls += 1; 
+              calls[$1, $2] = $3; 
+            }} 
+          }} 
+          else {{ 
+            if ( ($1, $2) in calls ) {{
+              n_gt += 1;
+              if ( calls[$1, $2] == "ALT" ) {{ 
+                if ( $3 in alts ) {{ tp += 1; }} 
+                else {{ 
+                  if ( $3 in refs ) {{ fp += 1; }} 
+                }} 
+              }} 
+              else {{ 
+                if ( calls[$1, $2] == "REF" ) {{ 
+                  if ( $3 in alts ) {{ fn += 1; }} 
+                  else {{ 
+                    if ( $3 in refs ) {{ tn += 1; }} 
+                  }} 
+                }} 
+              }} 
+            }} 
+            else {{ 
+              if ( $3 in alts ) {{ p_not_called += 1; }} 
+              if ( $3 in refs ) {{ n_not_called += 1; }} 
+            }} 
+          }} 
+        }}
+        END {{ 
+          no_ground_truth = n_calls - n_gt;
+          print "TP", "FP", "FN", "TN", "P_not_called", "N_not_called", "no_ground_truth";
+          print tp, fp, fn, tn, p_not_called, n_not_called, no_ground_truth;
+        }}' \
+         {input.calls} <( zcat {input.ground_truth} ) \
+         >{output} \
+         2>&1 | tee {log}
+        '''
+
+
 
 
 ## rules for calculating counts of all possible combinations of genotypes in prosolo calls and the ground truth
@@ -456,7 +786,7 @@ rule prosolo_genotype_matching_calculations_with_minGQ_30:
     log:
         "log/variant_calling/{reference}/prosolo/{sc}.{blk}.{candidates_type}.prosolo{min_sc_cov}.minGQ_30.gt_matching.ML_set.log"
     resources:
-        mem_gb = 10
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.genotype-calling.matches.R "
         " --gt {input.ground_truth} "
@@ -475,7 +805,7 @@ rule prosolo_genotype_matching_calculations_after_fdr:
     log:
         "log/variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.gt_matching.ML_set.log"
     resources:
-        mem_gb = 10
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.genotype-calling.matches.R "
         " --gt {input.ground_truth} "
@@ -494,7 +824,7 @@ rule prosolo_genotype_matching_calculations_after_fdr_with_minGQ_30:
     log:
         "log/variant_calling/{reference}/prosolo/fdr_{event_set}/{sc}.{blk}.{candidates_type}.fdr_{fdr}_{event_set}.prosolo{min_sc_cov}.minGQ_30.gt_matching.ML_set.log"
     resources:
-        mem_gb = 10
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.genotype-calling.matches.R "
         " --gt {input.ground_truth} "
@@ -515,7 +845,7 @@ rule prosolo_event_probs_ecdf:
     log:
         "log/variant_calling/{reference}/prosolo/{event_set}-rate/{sc}.{blk}.{candidates_type}.prosolo{min_sc_cov}.{event_set}-probs-ecdf.log"
     resources:
-        mem_gb = 10
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.ecdf-{wildcards.event_set}-probs.R "
         " --calls {input.calls} "
@@ -532,7 +862,7 @@ rule prosolo_event_probs_histogram:
     log:
         "log/variant_calling/{reference}/prosolo/{event_set}-rate/{sc}.{blk}.{candidates_type}.prosolo{min_sc_cov}.{event_set}-probs-histogram.log"
     resources:
-        mem_gb = 10
+        mem_gb = 20
     shell:
         "Rscript --vanilla " + include_prefix + "scripts/prosolo.histogram-{wildcards.event_set}-probs.R "
         " --calls {input.calls} "

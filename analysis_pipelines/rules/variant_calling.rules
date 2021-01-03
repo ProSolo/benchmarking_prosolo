@@ -26,5 +26,6 @@ include: "variant_calling/prosolo.rules"
 include: "variant_calling/sccaller.rules"
 include: "variant_calling/monovar.rules"
 include: "variant_calling/sciphi.rules"
+include: "variant_calling/scvilp.rules"
 
 

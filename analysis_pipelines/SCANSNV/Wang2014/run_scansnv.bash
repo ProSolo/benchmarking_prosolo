@@ -1,0 +1,81 @@
+nice scansnv \
+ --ref /path/to/refdata/HomoSapiens/hg19_CanonicalChr/genome_bwa-0.7.9a/hg19.fa \
+ --dbsnp /path/to/refdata/HomoSapiens/hg19_GATKBundle-2.8/dbsnp_138.hg19.vcf \
+ --shapeit-panel /path/to/refdata/HomoSapiens/hg19_shapeit/1000GP_Phase3 \
+ --output-dir variant_calling/hg19/Clones_single-cells/sensitivity_1/ \
+ --snakefile /path/to/SCANSNV/Wang2014/Snakefile \
+ --configfile config.yaml \
+ --bam TNBC-Pop-Tumor ../../Wang2014/mapping/hg19/samples/TNBC-Pop-Tumor.bps.sorted.bam \
+ --bam a1 ../../Wang2014/mapping/hg19/samples/a1.bps.sorted.bam \
+ --bam a2 ../../Wang2014/mapping/hg19/samples/a2.bps.sorted.bam \
+ --bam a3 ../../Wang2014/mapping/hg19/samples/a3.bps.sorted.bam \
+ --bam a4 ../../Wang2014/mapping/hg19/samples/a4.bps.sorted.bam \
+ --bam a5 ../../Wang2014/mapping/hg19/samples/a5.bps.sorted.bam \
+ --bam a6 ../../Wang2014/mapping/hg19/samples/a6.bps.sorted.bam \
+ --bam a7 ../../Wang2014/mapping/hg19/samples/a7.bps.sorted.bam \
+ --bam a8 ../../Wang2014/mapping/hg19/samples/a8.bps.sorted.bam \
+ --bam h1 ../../Wang2014/mapping/hg19/samples/h1.bps.sorted.bam \
+ --bam h2 ../../Wang2014/mapping/hg19/samples/h2.bps.sorted.bam \
+ --bam h3 ../../Wang2014/mapping/hg19/samples/h3.bps.sorted.bam \
+ --bam h4 ../../Wang2014/mapping/hg19/samples/h4.bps.sorted.bam \
+ --bam h5 ../../Wang2014/mapping/hg19/samples/h5.bps.sorted.bam \
+ --bam h6 ../../Wang2014/mapping/hg19/samples/h6.bps.sorted.bam \
+ --bam h7 ../../Wang2014/mapping/hg19/samples/h7.bps.sorted.bam \
+ --bam h8 ../../Wang2014/mapping/hg19/samples/h8.bps.sorted.bam \
+ --bam TNBC-n1 ../../Wang2014/mapping/hg19/samples/TNBC-n1.bps.sorted.bam \
+ --bam TNBC-n2 ../../Wang2014/mapping/hg19/samples/TNBC-n2.bps.sorted.bam \
+ --bam TNBC-n3 ../../Wang2014/mapping/hg19/samples/TNBC-n3.bps.sorted.bam \
+ --bam TNBC-n4 ../../Wang2014/mapping/hg19/samples/TNBC-n4.bps.sorted.bam \
+ --bam TNBC-n5 ../../Wang2014/mapping/hg19/samples/TNBC-n5.bps.sorted.bam \
+ --bam TNBC-n6 ../../Wang2014/mapping/hg19/samples/TNBC-n6.bps.sorted.bam \
+ --bam TNBC-n7 ../../Wang2014/mapping/hg19/samples/TNBC-n7.bps.sorted.bam \
+ --bam TNBC-n8 ../../Wang2014/mapping/hg19/samples/TNBC-n8.bps.sorted.bam \
+ --bam TNBC-n9 ../../Wang2014/mapping/hg19/samples/TNBC-n9.bps.sorted.bam \
+ --bam TNBC-n10 ../../Wang2014/mapping/hg19/samples/TNBC-n10.bps.sorted.bam \
+ --bam TNBC-n11 ../../Wang2014/mapping/hg19/samples/TNBC-n11.bps.sorted.bam \
+ --bam TNBC-n12 ../../Wang2014/mapping/hg19/samples/TNBC-n12.bps.sorted.bam \
+ --bam TNBC-n13 ../../Wang2014/mapping/hg19/samples/TNBC-n13.bps.sorted.bam \
+ --bam TNBC-n14 ../../Wang2014/mapping/hg19/samples/TNBC-n14.bps.sorted.bam \
+ --bam TNBC-n15 ../../Wang2014/mapping/hg19/samples/TNBC-n15.bps.sorted.bam \
+ --bam TNBC-n16 ../../Wang2014/mapping/hg19/samples/TNBC-n16.bps.sorted.bam \
+ --bulk-sample TNBC-Pop-Tumor \
+ --sc-sample a1 \
+ --sc-sample a2 \
+ --sc-sample a3 \
+ --sc-sample a4 \
+ --sc-sample a5 \
+ --sc-sample a6 \
+ --sc-sample a7 \
+ --sc-sample a8 \
+ --sc-sample h1 \
+ --sc-sample h2 \
+ --sc-sample h3 \
+ --sc-sample h4 \
+ --sc-sample h5 \
+ --sc-sample h6 \
+ --sc-sample h7 \
+ --sc-sample h8 \
+ --sc-sample TNBC-n1 \
+ --sc-sample TNBC-n2 \
+ --sc-sample TNBC-n3 \
+ --sc-sample TNBC-n4 \
+ --sc-sample TNBC-n5 \
+ --sc-sample TNBC-n6 \
+ --sc-sample TNBC-n7 \
+ --sc-sample TNBC-n8 \
+ --sc-sample TNBC-n9 \
+ --sc-sample TNBC-n10 \
+ --sc-sample TNBC-n11 \
+ --sc-sample TNBC-n12 \
+ --sc-sample TNBC-n13 \
+ --sc-sample TNBC-n14 \
+ --sc-sample TNBC-n15 \
+ --sc-sample TNBC-n16 \
+ --target-fdr 1.0 \
+ --min-sc-alt 1 \
+ --min-sc-dp 1 \
+ --min-bulk-dp 1 \
+ --regions-file gatk_regions_example.txt\
+ --joblimit 24 \
+ --resume #\
+# --snakemake-args " --use-conda "

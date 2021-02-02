@@ -36,7 +36,7 @@ pipelines in the following order:
    sequencing samples, with ground truth clonal and subclonal variants provided through targeted
    resequencing validation in the original publication (Supplementary Tables 6 and 7).
 
-For each dataset (`Dong2017`, `Hoell2014, `Laehnemann2017`, `Wang2014`), a separate `Snakefile`,
+For each dataset (`Dong2017`, `Hoell2014`, `Laehnemann2017`, `Wang2014`), a separate `Snakefile`,
 `config.yaml` and `pipeline.wrapper.bash` exist in the respective subfolders. You will have to adjust:
 
 ### `config.yaml`

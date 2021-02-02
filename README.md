@@ -1,5 +1,5 @@
 
-[![DOI](https://zenodo.org/badge/243326893.svg)](https://zenodo.org/badge/latestdoi/243326893)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3769115.svg)](https://doi.org/10.5281/zenodo.3769115)
 
 # Benchmarking ProSolo
 

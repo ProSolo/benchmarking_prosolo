@@ -53,7 +53,7 @@ You will have to download the data for each pipeline, put it into a subdirectory
 pipeline folder (e.g. `Dong2017/data/`) and set the `folders`->`data` path accordingly. Namely,
 you will have to get:
 
-1. `Dong2017`: From [SRA BioProject PRJNA305211](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=PRJNA305211&ff=on)
+1. `Dong2017`: From [SRA BioProject PRJNA305211](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=PRJNA305211&o=acc_s%3Aa)
    download samples `IL-1c`, `IL-11`, `IL-12`, `Clone-1`, `Clone-2` and `Clone-3` (they have
    the accessions `SRR2976561, SRR2976562, SRR2976563, SRR2976564, SRR2976565, SRR2976566`).
 2. `Hoell2014`: From [EGA Dataset EGAD00001005929](https://www.ebi.ac.uk/ega/datasets/EGAD00001005929)
@@ -70,7 +70,7 @@ set the paths accordingly (search for `/path/to/refdata/`).
 
 
 The biggest amount is provided by the
-[GATK Resource Bundle](https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle).
+[GATK Resource Bundle](https://gatk.broadinstitute.org/hc/en-us/articles/360035890811-Resource-bundle).
 Follow the instructions in the linked documentation to download `b37/hg19` for comparable results.
 
 For the `Hoell2014` and the `Laehnemann2017` pipelines, you will also need to download the

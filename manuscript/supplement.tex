@@ -656,16 +656,23 @@ With three separate bulk sequencing runs, their joint coverage of about 50 for 8
  Sequencing coverage of targeted genomic sites for multiple displacement amplified (MDA) single cells and respective bulk samples (continued from previous page).
  Panel \textbf{C} shows the coverage of the single cells (a1 to a8, h1 to h8, and TNBC-n1 to TNBC-n16), and the bulk samples (TNBC-Pop-Tumor and TNBC-Pop-Normal) that were used as ground truth for the normal single cells (with validated somatic variants added) and as ground truth for the tumor single cells (with validated somatic variants removed), respectively \cite{wang_clonal_2014}.
  }
- \label{fig:coverage-dists}
 \end{figure}
 
 \textbf{Whole exome sequencing of five human granulocytes with a pedigree ground truth.}
-For the second benchmarking dataset, Blood was taken from a patient after informed consent and granulocytes were sorted out in several steps: Initially, CD3- cells were captured via Magnetic-Activated Cell Sorting (MACS); among them, CD66b+ granulocytes were filtered out via Fluorescence Activated Cell Sorting (FACS) (Figure~\ref{fig:datasets}B).
+For the second benchmarking dataset, Blood was taken from a patient after informed consent and granulocytes were sorted out in several steps: Initially, CD3- cells were captured via Magnetic-Activated Cell Sorting (MACS); among them, CD66b+ granulocytes were filtered out via Fluorescence Activated Cell Sorting (FACS) (Figures~\ref{fig:datasets}B and \ref{fig:FACS-scheme}).
 Single cells from that cell population were isolated using a Fluidigm C1 microfluidics chip and subjected to multiple displacement amplification (MDA) using the GE Healthcare GenomiPhi Kit in its version adapted to that microfluidic chip.
 With a panel of 16 custom primer pairs covering different genes across chromosomes used in a quantitative real-time PCR, we selected granulocytes where at least 15 of these loci were properly amplified.
 For those cells, we performed whole exome capture using the Agilent SureSelectXT Human All Exon V5+UTRs Kit.
 The paired-end sequencing library (2x101bp) was then prepared with the TruSeq V3 Kit and sequenced on a HiSeq 2500.
 From the remaining sorted cell population, we extracted bulk DNA and submitted it to the same whole exome capture and DNA sequencing without MDA.\\
+
+\begin{figure}[!tpb]
+ \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_Granulozyten_P.pdf}
+ \caption{
+ 59 CD66b+ granulocytes were sorted out from a total population of 35779 CD3-T cell depleted peripheral blood cells (gate C in the right-most panel) and from these, five single cells were chosen where whole genome amplification had yielded DNA for at least 15 out of 16 control loci.
+ }
+ \label{fig:FACS-scheme}
+\end{figure}
 
 For the ground truth of this dataset, we could leverage previously published bulk whole exome sequencing data from the same person, their parents and three siblings (\cite{hoell_constitutional_2014}; Figure~\ref{fig:datasets}B).
 For ground truth alternative allele calls, we ran three pedigree-aware variant callers on the family whole exome data.
@@ -1207,7 +1214,7 @@ An overview and citations of software and resources beyond those mentioned in th
     picardtools         & 2.9.2     & mark duplicates               &  \\
     \midrule
     bcftools            & 1.6       & handle VCF / BCF files        & \citep{danecek_variant_2011} \\
-                        & 1.10      & some rule-specific environments & \citep{danecek_variant_2011} \\
+                        & 1.10      & rule-specific environment     &  \\
     \midrule
     mosdepth            & 0.2.5     & coverage calculations         & \citep{pedersen_mosdepth_2018} \\
     \midrule

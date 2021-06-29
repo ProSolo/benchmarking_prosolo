@@ -88,13 +88,13 @@ For such an alternative nucleotide $x\in\{A,C,G,T\}$ at a particular site in a g
 \begin{equation}
  \theta_{b}(x), \theta_{s}(x)
 \end{equation}
-as the (true, but usually unknown) frequency of alternative nucleotide $x$ in the bulk and single cell sample, respectively.
+as the true (but usually unknown) frequency of alternative nucleotide $x$ in the bulk and single cell sample, respectively.
 These frequencies translate into probabilities of sampling a DNA fragment containing the respective nucleotide at a site:
 either directly, as with the sequencing of DNA from a bulk of cells $b$;
 or indirectly, as with the sequencing of whole genome amplified DNA of a single cell $s$.
-It is our eventual goal to work back from bulk and single cell data to derive likelihoods for possible values of $\theta_{b}(x)$ and $\theta_{s}(x)$, respectively, allowing us to place likelihoods on possible underlying genotypes and events like allele dropouts in single cells.\\
+It is our eventual goal to work back from bulk and single cell data to derive likelihoods for all possible values of $\theta_{b}(x)$ (denoted as $\tilde{\theta_b}(x)$)\footnote{We use $\theta$ notation for the true underlying alternate allele frequency at a site, and $\tilde{\theta}$ notation when referring to the likelihood density estimates derived for all possible underlying alternate allele frequencies. The latter notation is thus mostly used for the definition of single cell events in section \ref{sec:event-space-def}.} and $\theta_{s}(x)$ (denoted as $\tilde{\theta_s}(x)$), respectively, allowing us to place likelihoods on possible underlying genotypes and events like allele dropouts in single cells.\\
 
-For a single diploid cell $s$, the possible alternative nucleotide frequencies are
+For a single diploid cell $s$, the true alternative nucleotide frequency can be
 \begin{equation}
  \theta_s(x) =
  \begin{cases}
@@ -408,6 +408,30 @@ As the $l$ reads are conditionally independent, given a particular (distorted) a
  L(\rho_s \mid\boldsymbol{Z}^s) \propto \Prob(\boldsymbol{Z}^s \mid \rho_s) = \prod_{i=1}^l \Prob(Z_i^s \mid \rho_s)
 \end{equation}
 
+\begin{table}[tbp]
+ \caption{
+ Parameters of the multiple displacement amplification (MDA) amplification bias model as presented in Supplementary Figure S5, panels C and D of \cite{lodato_somatic_2015}.
+ Each of these scales linearly up to a site coverage of 60, with the slopes and intercepts as given here.
+ }
+ \label{tab:Lodato-full}
+ \renewcommand{\arraystretch}{1.15}
+
+ \begin{center}
+  \begin{tabular}{lrr}
+   parameter  & slope        & intersect   \\
+   \toprule
+   $\alpha$   & -0.000027183 & 0.068567471 \\
+   $\beta$    & 0.007454388  & 2.367486659 \\
+   \midrule
+   $w$        & 0.000548761  & 0.540396786 \\
+   $\alpha_1$ & 0.057378844  & 0.669733191 \\
+   $\alpha_2$ & 0.003233912  & 0.399261625 \\
+   \bottomrule
+  \end{tabular}
+ \end{center}
+\end{table}
+
+
 With the resulting likelihoods for $\rho_s \in [0,1]$, we can calculate the likelihood of a particular $\theta_s$:
 
 \begin{equation}
@@ -428,7 +452,7 @@ For $\theta_s \in \{0,\frac12,1\}$, with equation \ref{eq.rho-given-theta} speci
  \end{split}
 \end{equation}
 
-For the current implementation, we use the empirical values for $\alpha(l), \beta(l), w(l), \alpha_1(l), \alpha_2(l)$ as deduced by \cite{lodato_somatic_2015} (Table~\ref{tab:Lodato}).
+For the current implementation, we use the empirical values for $\alpha(l), \beta(l), w(l), \alpha_1(l), \alpha_2(l)$ as deduced by \cite{lodato_somatic_2015} (Table~\ref{tab:Lodato-full}).
 But as mentioned above, these could be learned from a dataset at hand whenever high-confidence sets of heterozygous and homozygous sites are available (e.g.~by calling variants on a background bulk and cross-referencing with dbSNP).\\
 
 \subsection{Bulk background: Accounting for Amplification Errors and Allele Dropout}
@@ -478,7 +502,9 @@ But as mentioned above, these could be learned from a dataset at hand whenever h
  \end{table}
 \end{center}
 
-Using the above model for a genome position $g$, we can compute the likelihood of any combination of possible underlying alternative nucleotide frequencies in the single cell and the bulk sequencing sample, given the respective data.
+\subsubsection{Defining the Event Space}\label{sec:event-space-def}
+
+Using the above model for a genome position $g$, we can compute the likelihood of any combination of possible underlying alternative nucleotide frequencies in the single cell ($\tilde{\theta_s}$) and the bulk sequencing sample ($\tilde{\theta_b}$), given the respective data.
 All the possible combinations of allele frequencies in the two samples define a two-dimensional space of allele frequency likelihood density estimates $\boldsymbol{E}$ (Equation~\ref{eq:event-space}, Figure~\ref{fig:event-space}, Table~\ref{tab:Events}).
 We then define mutually exclusive sub-spaces of $\boldsymbol{E}$ as single cell events, for example the dropout of an alternative allele across allele frequencies $\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\tilde{\theta}_s} \times [\frac{1}{2}, 1)_{\tilde{\theta}_b}$, providing a set of events $\mathfrak{E}$.
 For these definitions, we always assume that---regarding a particular genomic site---the bulk cell population can only consist of a maximum of two sub-populations that are exactly one mutated allele apart from each other (Figure~\ref{fig:event-space}, lower panel).
@@ -486,6 +512,46 @@ At allele frequencies $\theta_b \in \{0, 0.5, 1\}$, we assume a homogeneous popu
 At frequencies in between, we assume a mixture of heterozygous cells with homozygous reference cells ($\theta_b \in (0,0.5)$), or with homozygous alternative cells ($\theta_b \in (0.5,1)$).
 For the above example ($\boldsymbol{E}_{\text{ADO to ref}} = \{ 0 \}_{\tilde{\theta}_s} \times [\frac{1}{2}, 1)_{\tilde{\theta}_b}$), this means that we can resolve a contradiction between the likelihood estimate at $\tilde{\theta}_s = 0$, which indicates a homozygous reference single cell, and the likelihood density estimate across $\tilde{\theta}_b \in [0.5,1)$, which indicates that the bulk does not contain any homozygous reference cells.
 Based on our assumption, we decide to trust the bulk sample over the single cell sample, meaning that the bulk is a mixture of a maximum of two sub-populations, and can only contain heterozygous and homozygous alternative cells, rendering a homozygous reference single cell impossible and thus the result of an allele dropout.
+
+To evaluate whether this assumption of only two sub-populations in the bulk is safe to make, we can examine all the possible ways in which this assumption may be violated.
+This requires that we have a sequence of two mutational events affecting the same genomic site, each generating a new sub-population.
+To know which types of mutational event sequences to consider, we note that the same point mutation has been observed to occur independently in different single cells from the same individual \citep{kuipers_single-cell_2017}, possibly due to selection for an advantageous effect of that mutation.
+However, the net effect of such parallel evolution still restricts the cell bulk to two sub-populations with distinct genotypes\footnote{As we are looking at different single cells separately, this also means that we do not have to worry about this kind of violation of the infinite sites assumption. Such parallel evolution only becomes problematic for phylogenetic reconstruction approaches that assume infinite sites, which would assume that each mutation only happens once in the tree.}.
+At the same time, we are not aware of cases where different cells from the same population acquire different point mutations at the exact same locus, and expect this to be highly unlikely.
+Instead, a third sub-population will usually be generated by a loss of heterozygosity event on a larger scale, covering a mutated site \citep{kuipers_single-cell_2017,satas_scarlet_2020}.
+
+Thus, if we start with a homozygous reference bulk, a first event would introduce an alternative allele mutation and a second event in that sub-population would lead to the loss of either the reference allele or the alternative allele.
+Losing the recently generated alternative allele leads to an allele frequency in that sub-population that is similar to the homozygous reference genotype (it only has coverage of the reference allele), and this sub-population is thus indistinguishable from the original homozygous reference population.
+ProSolo will correctly identify any single cells with the loss event as homozygous reference (Figure~\ref{fig:event-space}).
+
+However, losing the reference allele leads to a sub-population that only has coverage of the alternative allele and is thus similar to a homozygous alternative genotype and clearly distinguishable from the other two genotypes.
+While this type of event was not observed in a systematic survey of multiple mutational hits per site \citep{kuipers_single-cell_2017}, it has coincidentally been observed in a recent study that explicitly modeled copy number alterations in single cells for their phylogenetic reconstruction of cell lineages (mutation LINGO2:2 in \cite{satas_scarlet_2020}).
+Thus, we expect this type of event to be rare, but possible.
+In this case, as the alternative allele was only introduced in a sub-population and the loss of the reference allele is only present in an even smaller sub-population of that, the bulk frequency of this alternative allele will be well below $0.5$.
+Here, the ProSolo model assumes the homozygous alternative genotype of this sub-population impossible and instead calls cells from that sub-population as heterozygous (Figure~\ref{fig:event-space}).
+However, this only concerns the genotype, while the presence of the mutation will be identified correctly.
+As MonoVar is the only other variant calling software that can even genotype beyond calling the presence or absence of a mutation, this could only be considered a drawback compared to that tool.
+
+As germline homozygous alternative sites are very rare compared to germline homozygous reference sites (due to the reference genome being biased towards more common alleles), we expect the symmetric case\footnote{A mutation towards the reference with a subsequent complete loss of the originally homozygous alternative allele.} to be much less likely to be observed.
+
+Finally, starting from a heterozygous germline genotype in the bulk will be more likely than starting from a homozygous alternative genotype, but a lot less likely than starting from a homozygous reference genotype.
+From this starting point, three sub-populations regarding the same alternative allele can only be generated by two events in opposite directions in distinct cells from that population:
+one point mutation or loss event towards the reference and one point mutation or loss event towards the alternative allele, with the loss events much more likely to affect any site than the point mutations.
+Whether the resulting bulk alternative allele frequency then ends up above or below $0.5$, depends on which event happens earlier and/or grows faster within the population.
+As a result, the homozygous genotype (reference or alternative) with the lower frequency will erroneously be considered a heterozygous single cell genotype, but ProSolo will correctly call the more frequent (and thus probably more relevant) homozygous genotype.
+However, we are not aware of any such events being reported in the literature and expect them to be vary rare.
+
+We conclude that the assumption is reasonable to make and we only expect it to lead to the misclassification of homozygous alternative single cell sites as heterozygous when they have been generated by the introduction of an alternative allele via a point mutation, followed by an allelic loss of the reference allele in some daughter cells.
+We also discuss possible respective cases in the context of the tumor single cells from the data of \citet{wang_clonal_2014} (Supplement Section~\ref{sec:somatic-recall}).
+
+It should be possible to mitigate such cases with further extensions of the model to account for copy number changes.
+As in \citet{satas_scarlet_2020}, this would require separately obtaining copy number profiles that are then provided as input to ProSolo, but we do not yet see a standardized way of obtaining such profiles from single cell DNA-sequencing data.
+So far, such copy number profiles seem to have usually been obtained with custom scripts tailored to specific datasets (for example \cite{baslan_genome-wide_2012,satas_scarlet_2020,kuipers_single-cell_2020}), but when more generalized approaches for obtaining such profiles become available, they could then be used to adjust the exact model setup for each site based on the local copy number profile.
+Newer versions of varlociraptor, whose variant calling functionality ProSolo uses in the background, already allow for a chromosome-specific specification of copy numbers\footnote{See the "ploidy" definition in this documentation section: \url{https://varlociraptor.github.io/docs/calling/\#configuring-the-joint-prior-distribution}}.
+Thus, it should be possible to extend this to site-specific copy numbers in the future and to extend the ProSolo model to arbitrary ploidies.
+
+
+\subsubsection{Posterior Probabilities of Events}\label{sec:event-posteriors}
 
 Further assuming that there is no informative prior information about different allele frequencies (i.e. assuming a flat prior across all possible allele frequencies in both samples), we can then calculate the likelihood of such an event as the product of the likelihoods of the allele frequency ranges in the two samples.
 For $\boldsymbol{E}_{\text{ADO to ref}}$---and using Equation \ref{eq:thetas-likelihood} to calculate the likelihoods of the allele frequency ranges---this for example becomes:
@@ -698,14 +764,32 @@ At the same time, the number of such somatic variants will be small compared to 
 \label{fig:granulocytes-ground-truth}
 \end{figure}
 
+\begin{figure}[!tpb]
+  \includegraphics[width=\linewidth]{figs/Wang2014/Wang2014_validated_somatic_clonal_zygosity_misclassifications.pdf}
+ \caption{
+   The number of clonal variants with a respective alternative allele frequency, stratified by the genotype (hom for homozygous alternative and het for heterozygous) provided by \cite{wang_clonal_2014} for their somatic ground truth list.
+   We consider the peak around $0.4$ to represent genuine heterozygous variants and the peak around $0.7$ to represent genuine homozygous alternative variants, with a tumor sample purity in the duplex sequencing experiment of somewhere around those $0.7$.
+ }
+\label{fig:wang-clonals-zygosity}
+\end{figure}
+
 \textbf{Single nucleus exome sequencing of 16 normal and 16 tumor cells from a triple negative breast cancer (TNBC) \citep{wang_clonal_2014}.}
 The third dataset is a published dataset from a TNBC patient, with both tumor and matched normal cells available.
-For each, 16 cells and a bulk sample were whole exome sequenced.
+For each, 16 cells and a bulk sample were whole exome sequenced (Figure~\ref{fig:datasets}C).
 For the 32 single cells, library preparation was performed on isolated single nuclei \citep{wang_clonal_2014}.
 In addition, \cite{wang_clonal_2014} provide a list of 373 non-synonymous clonal and 94 non-synonymous subclonal somatic variants (Supplementary Tables 6 and 7 in \cite{wang_clonal_2014}) whose presence they validated with deep targeted duplex sequencing.
-Depending on the single cell, we used two different ground truths for two separate evaluations:
+As they provide a duplex sequencing based alternative allele frequency, we examined the alternative allele frequency distribution of the non-synonymous clonal variants, stratified by the specified zygosity (Figure~\ref{fig:wang-clonals-zygosity}).
+This clearly shows two alternative allele frequency peaks, one at around $0.4$ and the other at roughly double the alternative allele frequency around $0.7$.
+These two peaks should correspond to heterozygous ($0.4$) and homozygous alternative variants ($0.7$), respectively.
+As these are supposed to be clonal variants in the tumor, the remaining fraction of $0.3$ beyond the homozygous alternative variants peak (from $0.7$ to $1$) should be contamination with normal cells (without these somatic variants).
+This indicates a duplex sample tumor purity of around $0.7$.
+Unexpectedly, we also see the $0.7$ peak in variants that \cite{wang_clonal_2014} classified as heterozygous and the $0.4$ peak in variants that \cite{wang_clonal_2014} classified as homozygous alternative (Figure~\ref{fig:wang-clonals-zygosity}).
+It is unclear from \cite{wang_clonal_2014} and its supplementary material how the original variant classifications were generated, we assume that this is based on the genotypes obtained for the single cells.
+But as the single cells were genotyped with standard variant calling software (GATK UnifiedGenotyper), they very likely suffer from considerable allelic dropout and we thus reclassified the clonal variants' genotypes based on the duplex sequencing.
+If the alternative allele frequency determined by the ultra-deep duplex sequencing was below $0.6$, we classified the variant as heterozygous, and as homozygous alternative if this frequency was above (or equal to) $0.6$ (Figure~\ref{fig:wang-clonals-zygosity}).
+Then, depending on the single cell, we used two different ground truths for two separate evaluations:
 \begin{enumerate}
-    \item For the tumor single cells, we constructed a ground truth from normal bulk sample (as the tumor bulk sample was used for calling with ProSolo) using the same methodology as used for the cell line data (GATK HaplotypeCaller for variant sites, bcftools mpileup for non-variant sites).
+    \item For the tumor single cells, we constructed a ground truth from the normal bulk sample (as the tumor bulk sample was used for calling with ProSolo) using the same methodology as used for the cell line data (GATK HaplotypeCaller for variant sites, bcftools mpileup for non-variant sites).
     Please bear in mind that this ground truth will mostly only contain germline variants and only few somatic mutations that appeared early enough in the patient's life to rise to high somatic frequencies.
     Thus, similar caveats as for the germline ground truth in the granulocyte dataset apply.
     To mitigate this to a certain degree, we added the 373 clonal validated somatic variants, as these are expected to be present in all tumor single cells.
@@ -816,7 +900,8 @@ Calculations of $p$recision and $r$ecall were based on true positives (TP, alter
   \textbf{B} Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth.\newline 
   $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset in panel B.\newline
   \textbf{C} Precision and recall average of 16 tumor and 16 normal single cells sequence at the whole exome level. \newline \footnotesize
-  Thresholds used were applied via the following command line options:
+  Used thresholds are not comparable between tools.
+  They were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
@@ -853,10 +938,11 @@ While both strategies provide a biologically meaningful imputation that will be 
 As this will lead to an overestimation of the recall, we have excluded both SCIPhI's sensitive mode and ProSolo's imputation mode from the discussion of this dataset---however, their results are nevertheless displayed in all respective figures.
 
 \begin{figure}[!tpb]
-  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf}
+  \includegraphics[width=\linewidth]{figs/Dong2017/Dong2017_prosolo-monovar-scansnv-sccaller_per-cell_prec-rec.pdf}
  \caption{
- Cell-specific $F_1$ scores for different filtering threshold levels for the whole genome dataset.\newline \footnotesize
-  Thresholds used were applied via the following command line options:
+ Cell-specific precision-recall plots across different filtering threshold levels for the whole genome dataset.\newline \footnotesize
+  Used thresholds are not comparable between tools.
+  They were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
@@ -868,14 +954,16 @@ As this will lead to an overestimation of the recall, we have excluded both SCIP
   SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
   SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
  }
- \label{fig:F_1-scores_Dong2017}
+ \label{fig:per-cell_prec-rec_Dong2017}
 \end{figure}
 
 \begin{figure}[!tpb]
-  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf}
+  \includegraphics[width=\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_per-cell_prec-rec.pdf}
  \caption{
- Cell-specific $F_1$ scores for different filtering threshold levels for the whole exome dataset.\newline \footnotesize
-  Thresholds used were applied via the following command line options:
+ Cell-specific precision-recall plots across different filtering threshold levels for the whole exome dataset.\newline \footnotesize
+  $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset.\newline
+  Used thresholds are not comparable between tools.
+  They were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
@@ -887,16 +975,8 @@ As this will lead to an overestimation of the recall, we have excluded both SCIP
   SCcaller with recommended settings ({\itshape default}) or with a more {\itshape sensitive} calling;
   SCIPhI with default parameters ({\itshape default}) or all heuristics off ({\itshape sensitive}).
  }
- \label{fig:F_1-scores_Laehnemann2017}
+ \label{fig:per-cell_prec-rec_Laehnemann2017}
 \end{figure}
-
-ProSolo's improvements in accuracy can be further formalised using the $F_1$ score, the harmonic mean of precision $p$ and recall $r$, with $\beta = 1$ for the general $F$ score defined as \citep{van_rijsbergen_evaluation_1979,chinchor_muc-4_1992}:\\
-
-\begin{equation} \label{eq:F_1_score}
-  F_{\beta} = (\beta^2 + 1) \times \frac{p r}{\beta^2 p + r}
-\end{equation}
-
-The per-cell $F_1$ score clearly demonstrates ProSolo's performance advantage (Figures~\ref{fig:F_1-scores_Dong2017} and \ref{fig:F_1-scores_Laehnemann2017}), even when restricting our comparison to ProSolo's (and SCIPhI's) default mode for a fairer comparison on the whole exome dataset with a germline ground truth (see caveat discussed above).
 
 \begin{figure}[!tpb]
  \begin{minipage}{\linewidth}
@@ -926,7 +1006,7 @@ For the third dataset of single nucleus whole exome sequencing data of 32 cells 
 On the tumor cells, ProSolo is the only tool to achieve a precision above .99 (at a recall of .319).
 On the normal cells, both ProSolo and SCIPhI achieve a precision above .99.
 Here, SCIPhI outcompetes ProSolo with a maximum recall of .650 compared to ProSolo's .548.
-While ProSolo can achieve a similar recall (.625, see {\ttfamily --fdr} threshold of 0.2 in Figure~\ref{fig:alt-calling_prec-rec_global}C), this comes at a drastically precision.
+While ProSolo can achieve a similar recall (.625, see {\ttfamily --fdr} threshold of 0.2 in Figure~\ref{fig:alt-calling_prec-rec_global}C), this comes at a reduced precision.
 This reflects the inherent uncertainty of the single cell data and showcases a key difference in the approaches of ProSolo and SCIPhI.
 Where ProSolo models each cell and each genomic site separately, SCIPhI's model integrates information across all sites in all cells at once.
 While this can clearly help recover recall, this can also lead to false positive somatic variant calls (Figure~\ref{fig:somatic-recall}) and has clear implications for model complexity and software runtime.
@@ -951,11 +1031,18 @@ This is to be expected, as the model does not have any data available to compens
 In line with this increased uncertainty in variation calls, false discovery rates below 0.2 will remove all calls (Figure~\ref{fig:downsampling}), while the recall remains very high in unfiltered calls.
 
 \begin{figure}[!tpb]
-  \includegraphics[width=.99\linewidth]{figs/Laehnemann2017/Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf} \newline
+ \begin{minipage}[t]{.4\linewidth}
+  \includegraphics[height=70ex]{figs/Laehnemann2017/Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf}
+ \end{minipage}
+ \begin{minipage}[t]{.58\linewidth}
+  \includegraphics[height=70ex]{figs/Laehnemann2017/Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left_non-zero-bulk.pdf}
+ \end{minipage}\newline
  \caption{
-  Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth, including the results of ProSolo after downsampling from the maximum coverage of 50X to 35X, 20X, 5X or 0X.\newline 
+  Precision and recall average of five whole exome sequenced single granulocytes against their pedigree-based germline genotype ground truth, including the results of ProSolo after downsampling from the maximum coverage of 50X to 35X, 20X, 5X or 0X.
+  The left panel includes all bulk coverages, the right panel focuses on the differences in non-zero bulk coverages.\newline 
   $^\text{\sffamily-B}$ The germline ground truth induces an artificial increase of recall for SCIPhI's sensitive and ProSolo's imputation mode; these modes should thus be disregarded for a fair comparison on the granulocyte dataset.\newline \footnotesize
-  Thresholds used were applied via the following command line options:
+  Used thresholds are not comparable between tools.
+  They were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
@@ -982,19 +1069,30 @@ In line with this increased uncertainty in variation calls, false discovery rate
  }
  \label{fig:somatic-recall}
 \end{figure}
+
 For the tumor cells from the \cite{wang_clonal_2014} dataset, we could further determine the recall of non-synonymous somatic variants they had validated via deep targeted duplex sequencing and provided in their Supplementary Tables 6 and 7 (specifying clonal and subclonal variants, respectively).
 Clonal variants were assumed to be present in all 16 tumor cells, with the number of single cells with the subclonal somatic variant present provided by \cite{wang_clonal_2014}.
 While SCIPhI and SCcaller have a better recall of heterozygous genotype calls, neither of them can call homozygous alternative genotypes (Figure~\ref{fig:somatic-recall}).
 On the clonal variants, MonoVar has a higher homozygous alternative recall than ProSolo, but ProSolo has a higher heterozygous recall.
-On the subclonal variants, two things are notable:
+On the subclonal variants, three things are notable:
 \begin{enumerate}
   \item ProSolo has lower recall than the other tools, indicating that the depth of coverage in the tumor bulk sample (around 35X for 80\% of the exome, see Figure~\ref{fig:coverage-dists}C) is not sufficient to pick up low-frequency variants and the bulk sample thus further decreases the likelihood of such low frequency variants in the single cells.
   Thus, while the downsampling analysis above suggests that a very low bulk coverage is sufficient for ProSolo's model to perform well, this seems to be restricted to higher frequency mutations.
   Assuming an evenly mixed cell population (thus ignoring any population structure or in turn assuming an even sampling of all relevant subclones), the bulk coverage of 35X should allow for the discovery of variant alleles present at a frequency of at least 2.86\% of sampled alleles.
-  Judging by the frequency detected in the targeted duplex sequencing of \cite{wang_clonal_2014}, this should make the detection of 52 of the 94 subclonal variants, which corresponds to the number of missed subclonal variants in Figure~\ref{fig:somatic-recall}.
+  Judging by the frequency detected in the targeted duplex sequencing of \cite{wang_clonal_2014}, this should render the detection of 52 of the 94 subclonal variants impossible, which corresponds to the number of missed subclonal variants in Figure~\ref{fig:somatic-recall}.
   As a consequence, if the aim is to detect lower frequency mutations, we simply recommend a deeper sequencing of the bulk sample.
-  \item SCIPhI calls nine heterozygous mutations in 12 or 15 cells, while the maximum frequency for any of the heterozygous subclonal mutation detected in the deeply sequenced tumor bulk was 0.233, more in the range of the maximum number of six out of 16 cells that \cite{wang_clonal_2014} found any of the subclonal variants in.
+  \item SCIPhI calls nine heterozygous mutations in 12 or 15 cells, while the maximum frequency for any of the heterozygous subclonal mutations detected in the deeply sequenced tumor bulk was 0.233, more in the range of the maximum number of six out of 16 cells that \cite{wang_clonal_2014} found any of the subclonal variants in.
   This suggests that SCIPhI's model over-imputes mutations by aggregating information across cells.
+  \item None of the tools calls any of the six homozygous alternative variants.
+  SCcaller and SCIPhI do not genotype and thus can only determine the presence or absence of an alternative allele.
+  We chose to represent this as a heterozygous alternative genotype, as is this will be the correct choice in the majority of cases.
+  For MonoVar, this is surprising, as all these homozygous alternative variants should be present in three cells, which should allow MonoVar to recover them even when enforcing an occurrence in a minimum of three independent single cells.
+  For ProSolo, this seems to be due to the low bulk coverage of these variants.
+  The low coverage of these variants in the duplex sequencing means that the alternative allele is probably not covered in the low coverage bulk tumor sample at all, and ProSolo accordingly assigns a homozygous reference genotype.
+  However, if the bulk coverage were higher, ProSolo might still suffer from its assumption of a maximum of two different genotypes at a site in the bulk sample.
+  This can lead to erroneously mis-calling homozygous alternative sites as heterozygous, when they are the result of a point mutation followed by a loss of the reference allele in a daughter cell (Supplementary Section~\ref{sec:event-space-def}).
+  However, an even simpler explanation (for all tools) could be that the ground truth genotype was called with GATK UnifiedGenotyper, a variant caller that is not adapted to single cell DNA-sequencing data, and may have thus suffered from allele dropout of the reference allele to generate these homozygous alternative genotypes.
+  This could mean that these homozygous alternative ground truth are not correct to begin with.
 \end{enumerate}
 
 \subsection{False Discovery Rate Control of Alternative Allele Calling} \label{sec:fdr-of-alt-calling}
@@ -1016,7 +1114,8 @@ On the subclonal variants, two things are notable:
  False discovery rate (FDR, $1 - p$recision) as calculated based on the ground truth, compared to the theoretical FDR we controlled for using ProSolo, for (A) the whole genome data set and (B) the whole exome data set.
  The diagonal indicates identity of the ground truth FDR with the FDR that was controlled for.
  Any points underneath it indicate overly conservative FDR control, any points above it indicate an FDR control that is too lenient.\newline \footnotesize
-  Thresholds used were applied via the following command line options:
+  Used thresholds are not comparable between tools.
+  They were applied via the following command line options:
   MonoVar {\ttfamily --t};
   ProSolo {\ttfamily --fdr};
   SCAN-SNV {\ttfamily --fdr};
@@ -1114,7 +1213,12 @@ As a further performance comparison, we want to include a direct comparison of t
 As only ProSolo, MonoVar and SCAN-SNV provide actual genotype calls---a further refinement over the alternative allele calling described above---SCcaller and SCIPhI cannot be included in this comparison.
 Further, the small numbers of calls made by SCAN-SNV would not be interpretable in the figures provided, and we have thus also excluded SCAN-SNV from this comparison.
 
-Comparisons provided here are based on the software modes that achieved the highest $F_1$ score across most single cells for alternative allele calling (Figure~\ref{fig:alt-calling_prec-rec}C).
+Comparisons provided here are based on the software modes that achieved the highest $F_1$ score across most single cells for alternative allele calling (Figure~\ref{fig:alt-calling_prec-rec}C), with the $F_1$ score defined as the harmonic mean of precision $p$ and recall $r$ (with $\beta = 1$ for the general $F$ score, see \cite{van_rijsbergen_evaluation_1979,chinchor_muc-4_1992}):\\
+
+\begin{equation} \label{eq:F_1_score}
+  F_{\beta} = (\beta^2 + 1) \times \frac{p r}{\beta^2 p + r}
+\end{equation}.
+
 For ProSolo, this amounts to the default mode without imputation (which also ensures a fair comparison against the germline-based ground truth) and controlling for a false discovery rate of $0.2$.
 For MonoVar, this means no consensus filtering and no filtering via the {\ttfamily --t} thresholding parameter.\\
 

@@ -128,19 +128,26 @@ for ( sc in tumor_cells ) {
 
 validated_somatics <- read_tsv(
   "Wang2014_ground_truth_non_synonymous_variants.hg18_to_hg19.tsv"
-)
+) %>%
+  mutate(
+    Duplex_Freq = as.numeric( str_replace(Duplex_Freq, ",", ".") ),
+    Duplex_P_val = as.numeric(
+      str_replace(
+        str_replace(
+          str_replace(Duplex_P_val, "-[^\\d]+", "-"),
+          "<", ""),
+        ",", ".")
+      )
+    )
 
 max_subclonal_het <- validated_somatics %>%
   filter(class == "subclonal") %>%
   filter(zygosity == "het") %>%
-  mutate(
-    Duplex_Freq = as.double(str_replace(Duplex_Freq, ',', '.'))
-  ) %>%
   summarize(max(Duplex_Freq))
 write_tsv(max_subclonal_het, path = "Wang2014_max_subclonal_duplex_frequency.tsv")  
 
 expected_numbers <- validated_somatics %>%
-  select(class, chrom, pos, REF, VAR, cells, zygosity) %>%
+  select(class, chrom, pos, REF, VAR, cells, zygosity, Duplex_Freq) %>%
   rename(
     CHROM = chrom,
     POS = pos,
@@ -148,25 +155,51 @@ expected_numbers <- validated_somatics %>%
     ALT = VAR,
     number_of_cells = cells,
     CLONALITY = class,
-    GT = zygosity
   ) %>%
   mutate(
     number_of_cells = if_else(number_of_cells == "NaN", 16, number_of_cells),
     GT = case_when(
-      GT == "het" ~ "0/1",
-      GT == "hom" ~ "1/1",
-      TRUE ~ "unknown"
-    )
+      zygosity == "het" ~ "0/1",
+      zygosity == "hom" ~ "1/1"
+    ),
+    expected_GT = GT
   ) %>%
   add_column(
     software = "expected"
   )
-  
+ 
 per_software <- recall_per_cell %>%
-  filter(GT_CALL == "TP") %>%
   count(software, CHROM, POS, REF, ALT, CLONALITY, GT, name = "number_of_cells") %>%
-  full_join(expected_numbers) %>%
-  complete(software, nesting(CHROM, POS, REF, ALT, CLONALITY, GT), fill = list(number_of_cells = 0))
+  # add the expected genotype into software records
+  full_join(
+    expected_numbers %>%
+      select(
+        -software,
+        -number_of_cells,
+        -zygosity,
+        -GT
+      ),
+    by = c("CHROM", "POS", "REF", "ALT", "CLONALITY")
+    ) %>%
+  # remove incorrect calls
+  filter(GT == expected_GT) %>%
+  # restrict to variants in the truth set
+  right_join(
+    expected_numbers %>%
+      select(CHROM, POS, REF, ALT)
+    ) %>%
+  # exclude superfluous non-software entries from previous filtering join
+  filter(!is.na(software)) %>%
+  # add in the expected variant counts
+  full_join(
+    expected_numbers %>%
+      select(
+        -zygosity,
+        -Duplex_Freq
+      )
+  ) %>%
+  # fill in zeros for non-existing software entries
+  complete(software, nesting(CHROM, POS, REF, ALT, CLONALITY, expected_GT), fill = list(number_of_cells = 0))
   
 q <- ggplot(
     per_software
@@ -179,7 +212,7 @@ q <- ggplot(
     position = position_dodge( preserve = "single" )
   ) + 
   facet_grid(
-    cols = vars(GT),
+    cols = vars(expected_GT),
     rows = vars(CLONALITY),
     scales = "free_y"
   ) +

@@ -245,13 +245,10 @@ ggplot(metrics %>%
 #          software != "ProSolo imputation",
 #          software != "SCIPhI sensitive"
           ),
-  aes(x = filter, y = F1) ) +
-  coord_cartesian( ylim = c(0,1) ) +
+  aes(x = recall, y = precision) ) +
+  coord_cartesian( ylim = c(0.875,1), xlim = c(0,0.35) ) +
   geom_point( aes(shape = filter_factor, color = software, fill = software), size = 4) +
   geom_line( aes(group = interaction(cell, software), color = software, linetype = software)) +
-  scale_x_continuous(
-    trans = 'log10'
-  ) +
   scale_shape_manual(
     values = shape_pal
   ) +
@@ -291,10 +288,10 @@ ggplot(metrics %>%
     )
   ) +
   facet_wrap(~cell, ncol=2) +
-  labs(x = "threshold used",
-       y = "F_1 score",
+  labs(x = "recall",
+       y = "precision",
        title = "5 granulocytes")
-ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_F1_plot.pdf", device = cairo_pdf, width=21, height=24)
+ggsave("Laehnemann2017_prosolo-monovar-scansnv-sccaller-sciphi_per-cell_prec-rec.pdf", device = cairo_pdf, width=21, height=24)
 
 ggplot(avg_per_software_and_parameter %>%
     filter(
@@ -391,6 +388,53 @@ ggplot(avg_per_software_and_parameter %>%
   scale_linetype_manual(
     values = linetype_pal,
     labels = software_labels,
+    guide = "none"
+    ) +
+  geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
+  scale_shape_manual(
+    guide = "none",
+    values = shape_pal
+    ) +
+  scale_colour_manual(
+    guide = "none",
+    labels = software_labels,
+    values = software_pal
+    ) +
+  scale_fill_manual(
+    guide = "none",
+    labels = software_labels,
+    values = software_pal
+    ) +
+#  guides( 
+#    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
+#    shape = guide_legend( title = "threshold used")
+#    ) +
+  theme_bw(base_size=24, base_family="Lato") +
+  labs(x = "average recall",
+       y = "average precision",
+       title = "Low bulk coverage sufficient",
+       subtitle = "5 granulocytes")
+ggsave(
+  "Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf",
+  device = cairo_pdf,
+  width=7,
+  height=14
+  )
+
+# downsampling focus
+ggplot(avg_per_software_and_parameter %>%
+    filter(
+      software != "SCcaller default bulk",
+      software != "SCcaller sensitive bulk",
+      !str_detect(software, "ProSolo default"),
+      !str_detect(software, "ProSolo imputation")
+      ),
+    aes(x = avg_rec, y = avg_prec) ) +
+  coord_cartesian( ylim = c(0.92,1), xlim = c(0,0.35) ) +
+  geom_line( aes( color = software, linetype = software ) ) +
+  scale_linetype_manual(
+    values = linetype_pal,
+    labels = software_labels,
     guide = "legend"
     ) +
   geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
@@ -409,18 +453,18 @@ ggplot(avg_per_software_and_parameter %>%
     values = software_pal
     ) +
   guides( 
-    linetype = guide_legend( keywidth = 3, keyheight = 1.5),
+    linetype = guide_legend( keywidth = 4.5, keyheight = 1.5),
     shape = guide_legend( title = "threshold used")
     ) +
   theme_bw(base_size=24, base_family="Lato") +
   labs(x = "average recall",
        y = "average precision",
-       title = "Low bulk coverage sufficient for ProSolo",
-       subtitle = "5 granulocytes")
+       title = " ",
+       subtitle = " ")
 ggsave(
-  "Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left.pdf",
+  "Laehnemann2017_prosolo-downsampling_prosolo-monovar-scansnv-sccaller-sciphi_precision-recall-plot_focus-top-left_non-zero-bulk.pdf",
   device = cairo_pdf,
-  width=18,
-  height=16
+  width=12,
+  height=14
   )
 

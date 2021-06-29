@@ -211,13 +211,10 @@ ggsave("Dong2017_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf", device = c
   
 ggplot(metrics %>% 
         filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),
-  aes(x = filter, y = F1) ) +
-  coord_cartesian( ylim = c(0,1) ) +
-  geom_line( aes(group = interaction(cell, software), color = software, linetype = software)) +
+  aes(x = recall, y = precision) ) +
+  coord_cartesian( ylim = c(0.95,1), xlim = c(0.35,0.85) ) +
+  geom_line( aes(color = software, linetype = software)) +
   geom_point( aes(shape = filter_factor, color = software, fill = software), size = 4) +
-  scale_x_continuous(
-    trans = 'log10'
-  ) +
   scale_shape_manual(
     values = shape_pal
   ) +
@@ -246,11 +243,11 @@ ggplot(metrics %>%
   ) +
   facet_wrap(~cell, ncol = 2) +
   labs(
-    x = "threshold used",
-    y = "F_1 score",
+    x = "recall",
+    y = "precision",
     title = "IL-11 and IL-12"
   )
-ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_F1_plot.pdf", device = cairo_pdf, width=21, height=10)
+ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_per-cell_prec-rec.pdf", device = cairo_pdf, width=21, height=10)
 
 ggplot(avg_per_software_and_parameter %>%
     filter(software != "SCcaller default bulk", software != "SCcaller sensitive bulk"),

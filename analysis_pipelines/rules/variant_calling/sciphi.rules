@@ -328,7 +328,7 @@ rule sciphi_validated_somatic_recall:
                         gt_status = "FN";
                         print "UNKNOWN_GENOTYPE:",$(f["GT"]) "\\n";
                     }}
-                    print $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]),gt,gt_status,alt_status,clon "\\n";
+                    print $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]),$(f["GT"]),gt_status,alt_status,clon "\\n";
                   }}
                 }}
               }}

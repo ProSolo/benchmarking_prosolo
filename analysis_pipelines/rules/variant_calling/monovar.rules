@@ -175,12 +175,12 @@ rule monovar_validated_somatic_recall:
                   if ( gt != "" ) {{
                     clon = clonality[ $(f["CHROM"]),$(f["POS"]),$(f["REF"]),$(f["ALT"]) ];
                     if ( $5 == "0/0" ) {{
-                        print $1,$2,$3,$4,gt,"FN","FN",clon "\\n";
+                        print $1,$2,$3,$4,$5,"FN","FN",clon "\\n";
                     }} else if ( $5 == "0/1" || $5 == "1/1" ) {{
                       if ( $5 == gt ) {{
-                        print $1,$2,$3,$4,gt,"TP","TP",clon "\\n";
+                        print $1,$2,$3,$4,$5,"TP","TP",clon "\\n";
                       }} else {{
-                        print $1,$2,$3,$4,gt,"FN","TP",clon "\\n";
+                        print $1,$2,$3,$4,$5,"FN","TP",clon "\\n";
                       }}
                     }} else {{
                         print "UNKNOWN_GENOTYPE:",$5 "\\n";

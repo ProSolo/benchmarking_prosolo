@@ -1,3 +1,15 @@
+# install dependencies with mamba:
+# mamba create -n pyliftover-pandas -c conda-forge -c bioconda pyliftover=0.4 pandas=1.1.5
+# 
+# activate the new environment before running this script:
+# conda activate pyliftover-pandas
+#
+# then run with:
+# python3 nature13600-s1-tables_to_ground_truth.py >Wang2014_ground_truth_non_synonymous_variants.hg18_to_hg19.tsv
+#
+# and deactivate the environment:
+# conda deactivate
+
 import pandas
 import re
 
@@ -19,6 +31,13 @@ with open("Wang2014_ground_truth_non_synonymous_variants.hg18_to_hg19.tsv", mode
         lo = liftover.convert_coordinate(row['chrom'],row['pos'] - 1)[0]
         row['chrom'] = lo[0]
         row['pos'] = lo[1] + 1
+        # reclassify clonals' zygosity based on the Duplex_Freq
+        if row['class'] == 'clonal':
+            freq = float(row['Duplex_Freq'].replace(',', '.'))
+            if freq >= 0.6:
+                row['zygosity'] = 'hom'
+            else:
+                row['zygosity'] = 'het'
         print( '\t'.join(map(str, row)) )
         print( '\t'.join(map(str, row)), file=out, end='\n' )
 

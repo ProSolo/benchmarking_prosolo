@@ -1,5 +1,6 @@
 # packages, colors, palettes and stuff
 source("../common.R")
+library(knitr)
 
 tumor_cells <- c(
     "a1",
@@ -168,19 +169,44 @@ expected_numbers <- validated_somatics %>%
     software = "expected"
   )
  
-per_software <- recall_per_cell %>%
+counts_per_software <- recall_per_cell %>%
   count(software, CHROM, POS, REF, ALT, CLONALITY, GT, name = "number_of_cells") %>%
   # add the expected genotype into software records
   full_join(
     expected_numbers %>%
+      rename(expected_number_of_cells = number_of_cells) %>%
       select(
         -software,
-        -number_of_cells,
         -zygosity,
         -GT
       ),
     by = c("CHROM", "POS", "REF", "ALT", "CLONALITY")
-    ) %>%
+    )
+  
+overimputed <- counts_per_software %>%
+  semi_join(
+    counts_per_software %>%
+    filter(
+      CLONALITY == "subclonal",
+      software == "SCIPhI default",
+      GT == expected_GT,
+      number_of_cells > expected_number_of_cells + 2
+    ),
+    by = c("CHROM", "POS", "REF", "ALT", "CLONALITY", "expected_number_of_cells", "Duplex_Freq", "expected_GT")
+  ) %>%
+  filter(
+    GT != "0/0"
+  ) %>%
+  pivot_wider(
+    names_from = c(software, GT),
+    names_prefix = "cells_",
+    values_from = number_of_cells,
+    values_fill = 0
+  ) %>%
+  arrange(CHROM, POS) %>%
+  kable(format = "latex")
+ 
+per_software <- counts_per_software %>%
   # remove incorrect calls
   filter(GT == expected_GT) %>%
   # restrict to variants in the truth set

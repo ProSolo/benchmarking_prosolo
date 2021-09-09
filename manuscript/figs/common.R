@@ -120,14 +120,14 @@ software_labels <- c(
    "ProSolo def 16X bulk" = "ProSolo def 16X bulk",
    "ProSolo def  4X bulk" = "ProSolo def  4X bulk",
    "ProSolo def  0X bulk" = "ProSolo def  0X bulk",
-   "ProSolo imputation" = bquote('ProSolo imputation'^-B),
+   "ProSolo imputation" = bquote('ProSolo imputation'^-b),
    "SCAN-SNV sensitive" = "SCAN-SNV sensitive",
    "SCcaller default dbsnp" = "SCcaller default dbsnp",
    "SCcaller sensitive dbsnp" = "SCcaller sensitive dbsnp",
    "SCIPhI default" = "SCIPhI default",
-   "SCIPhI sensitive" = bquote('SCIPhI sensitive'^-B),
+   "SCIPhI sensitive" = bquote('SCIPhI sensitive'^-b),
    "scVILP default" = "scVILP default",
-   "scVILP sensitive" = bquote('scVILP sensitive'^-B)
+   "scVILP sensitive" = bquote('scVILP sensitive'^-b)
 )
 
 shape_pal <-

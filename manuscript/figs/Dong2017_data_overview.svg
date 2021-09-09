@@ -14,7 +14,7 @@
    viewBox="0 0 214.16284 268.51526"
    id="svg2"
    version="1.1"
-   inkscape:version="0.92.3 (2405546, 2018-03-11)"
+   inkscape:version="0.92.5 (2060ec1f9f, 2020-04-08)"
    sodipodi:docname="Dong2017_data_overview.svg">
   <defs
      id="defs4">
@@ -3410,16 +3410,16 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="2.8105944"
-     inkscape:cx="114.22017"
+     inkscape:cx="49.287286"
      inkscape:cy="143.20814"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
-     inkscape:window-width="960"
-     inkscape:window-height="981"
+     inkscape:window-width="1680"
+     inkscape:window-height="953"
      inkscape:window-x="0"
-     inkscape:window-y="28"
-     inkscape:window-maximized="0"
+     inkscape:window-y="27"
+     inkscape:window-maximized="1"
      inkscape:connector-spacing="5"
      fit-margin-top="0"
      fit-margin-left="0"
@@ -3435,7 +3435,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -5374,7 +5374,7 @@
          id="tspan4600"
          x="-279.08554"
          y="-2.632957"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:lato;-inkscape-font-specification:lato;stroke-width:0.93750006">A</tspan></text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:lato;-inkscape-font-specification:lato;stroke-width:0.93750006">a</tspan></text>
     <path
        inkscape:connector-curvature="0"
        id="path4608"

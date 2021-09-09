@@ -238,6 +238,15 @@ for (b in unique( cells %>% pull(batch) ) ) {
 fils = levels(avg_per_software_batch_and_parameter$filter)
 
 axis_limits <- c(0.0000001,1)
+reduced_software_pal <- software_pal %>%
+  enframe() %>% 
+  filter(
+    name == "ProSolo default" |
+      name == "ProSolo imputation" |
+      name == "SCIPhI default" |
+      name == "SCIPhI sensitive"
+    ) %>%
+  deframe()
 
 ggplot(avg_per_software_batch_and_parameter %>%
          filter(
@@ -253,7 +262,7 @@ ggplot(avg_per_software_batch_and_parameter %>%
          )
   ) + 
   geom_point(aes(x = num_filter, y = avg_FDR, color = software, shape = filter), size = 4) +
-  geom_abline(intercept = 0) +
+  geom_segment(aes(x = 0.000001, y = 0.000001, xend = 1, yend = 1)) +
   scale_x_continuous(
     trans = "log10",
     limits=axis_limits
@@ -263,9 +272,9 @@ ggplot(avg_per_software_batch_and_parameter %>%
     limits=axis_limits
   ) +
   scale_color_manual(
-    values = software_pal,
+    values = reduced_software_pal,
     labels = software_labels,
-    drop = FALSE
+    drop = TRUE
   ) +
   scale_shape_manual(
     name = "theoretical FDR",
@@ -279,7 +288,7 @@ ggplot(avg_per_software_batch_and_parameter %>%
   labs(
     x = "theoretical FDR",
     y = "ground truth FDR",
-    tag = "C",
+    tag = "c",
     title = "TNBC"
   )
 ggsave(
@@ -288,6 +297,20 @@ ggsave(
   width=16,
   height=7.5
 )
+
+basic_software_pal <- software_pal %>%
+  enframe() %>%
+  filter(
+    name %in% basic_software_levels
+  ) %>%
+  deframe()
+
+basic_linetype_pal <- linetype_pal %>%
+  enframe() %>%
+  filter(
+    name %in% basic_software_levels
+  ) %>%
+  deframe()
 
 ggplot(avg_per_software_batch_and_parameter %>%
     filter(
@@ -299,18 +322,18 @@ ggplot(avg_per_software_batch_and_parameter %>%
   coord_cartesian( ylim = c(0,1), xlim = c(0,1) ) +
   geom_line( aes( color = software, linetype = software ) ) +
   scale_linetype_manual(
-    values = linetype_pal,
+    values = basic_linetype_pal,
     labels = software_labels,
     drop = FALSE
     ) +
   geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
   scale_colour_manual(
-    values = software_pal,
+    values = basic_software_pal,
     labels = software_labels,
     drop = FALSE
     ) +
   scale_fill_manual(
-    values = software_pal,
+    values = basic_software_pal,
     labels = software_labels,
     drop = FALSE
     ) +
@@ -328,13 +351,13 @@ ggplot(avg_per_software_batch_and_parameter %>%
   theme_bw(base_size=24, base_family="Lato")  +
   labs(x = "average recall",
        y = "average precision",
-       tag = "C",
+       tag = "c",
        title = "TNBC")
 ggsave(
   "Wang2014_prosolo-monovar-scansnv-sccaller-scvilp_precision-recall-plot.pdf",
   device = cairo_pdf,
-  width=15,
-  height=7.5
+  width=16,
+  height=8.5
 )
 
 # focus on main tool area
@@ -347,18 +370,18 @@ ggplot(avg_per_software_batch_and_parameter %>%
 #  geom_errorbar( aes( ymin = min_prec, ymax = max_prec, color = software) ) +
 #  geom_errorbar( aes( xmin = min_rec, xmax = max_rec, color = software ) ) +
   scale_linetype_manual(
-    values = linetype_pal,
+    values = basic_linetype_pal,
     labels = software_labels,
     drop = FALSE
     ) +
   geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
   scale_colour_manual(
-    values = software_pal,
+    values = basic_software_pal,
     labels = software_labels,
     drop = FALSE
     ) +
   scale_fill_manual(
-    values = software_pal,
+    values = basic_software_pal,
     labels = software_labels,
     drop = FALSE
     ) +
@@ -376,13 +399,13 @@ ggplot(avg_per_software_batch_and_parameter %>%
   theme_bw(base_size=24, base_family="Lato") +
   labs(x = "average recall",
        y = "average precision",
-       tag = "C",
+       tag = "c",
        title = "TNBC")
 ggsave(
   "Wang2014_prosolo-monovar-scansnv-sccaller-scvilp_precision-recall-plot_focus-tools.pdf",
   device = cairo_pdf,
-  width=15,
-  height=7.5
+  width=16,
+  height=8.5
 )
 
 for (b in unique( cells %>% pull(batch) ) ) {
@@ -401,18 +424,18 @@ for (b in unique( cells %>% pull(batch) ) ) {
     coord_cartesian( ylim = ylim, xlim = xlim ) +
     geom_line( aes( color = software, linetype = software) ) +
     scale_linetype_manual(
-      values = linetype_pal,
+      values = basic_linetype_pal,
       labels = software_labels,
       drop = FALSE
       ) +
     geom_point( aes(shape = filter, color = software, fill = software), size = 4) +
     scale_colour_manual(
-      values = software_pal,
+      values = basic_software_pal,
       labels = software_labels,
       drop = FALSE
       ) +
     scale_fill_manual(
-      values = software_pal,
+      values = basic_software_pal,
       labels = software_labels,
       drop = FALSE
       ) +

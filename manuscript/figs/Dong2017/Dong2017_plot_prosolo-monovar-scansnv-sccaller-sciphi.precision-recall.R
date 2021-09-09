@@ -182,7 +182,7 @@ ggplot(avg_per_software_and_parameter %>%
         mutate(num_filter = as.numeric(levels(filter)[filter]) )
   ) + 
   geom_point(aes(x = num_filter, y = avg_FDR, color = software, shape = filter), size = 4) +
-  geom_abline(intercept = 0) +
+  geom_segment(aes(x = 0.000001, y = 0.000001, xend = 1, yend = 1)) +
   scale_x_continuous(
     trans = "log10",
     limits=axis_limits
@@ -204,7 +204,7 @@ ggplot(avg_per_software_and_parameter %>%
   labs(
     x = "theoretical FDR",
     y = "ground truth FDR",
-    tag = "A",
+    tag = "a",
     title = "IL-11 and IL-12"
   )
 ggsave("Dong2017_prosolo-sciphi_FDR_ground_truth_vs_theoretical.pdf", device = cairo_pdf, width=8, height=7.5)
@@ -277,7 +277,7 @@ ggplot(avg_per_software_and_parameter %>%
   theme_bw(base_size=24, base_family="Lato")  +
   labs(x = "average recall",
        y = "average precision",
-       tag = "A",
+       tag = "a",
        title = "IL-11 and IL-12")
 ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot.pdf", device = cairo_pdf, width=8, height=7.5)
 
@@ -310,7 +310,7 @@ ggplot(avg_per_software_and_parameter %>%
   theme_bw(base_size=24, base_family="Lato") +
   labs(x = "average recall",
        y = "average precision",
-       tag = "A",
+       tag = "a",
        title = "IL-11 and IL-12")
 ggsave("Dong2017_prosolo-monovar-scansnv-sccaller_precision-recall-plot_focus-tools.pdf", device = cairo_pdf, width=8, height=7.5)
 

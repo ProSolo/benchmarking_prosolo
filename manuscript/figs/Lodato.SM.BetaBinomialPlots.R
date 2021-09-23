@@ -88,7 +88,7 @@ for (c in covs) {
     stat_function(fun=dbetabinom.ab, n = c+1, args=list(size=c,shape1=al_2(c),shape2=al_2(c)), 
                   #geom="line", colour=pal[3]) + 
                   geom="line", linetype=3, size = 1.2) +
-    labs(tag = "B",
+    labs(tag = "b",
          title = "known heterozygous sites:\n allelic bias / dropout",
          x = "number of reads with alternative allele",
          y = "fraction of sites") +
@@ -109,7 +109,7 @@ for (c in covs) {
   b2 <- ggplot(data.frame(x=c(0,c)), aes(x)) #+ coord_cartesian(ylim = c(0,0.1))
   b2 <- b2 + 
     stat_function(fun=hom_ref_model, n = c+1, args=list(cov=c), geom="bar", fill = brewer.pal(4, "Greys")[3]) + 
-    labs(tag = "A",
+    labs(tag = "a",
          title = "known homozygous reference sites:\n alternative allele coverage",
          x = "number of reads with alternative allele",
          y = "fraction of sites") +
@@ -124,7 +124,7 @@ for (c in covs) {
   b2 <- ggplot(data.frame(x=c(0,c)), aes(x)) #+ coord_cartesian(ylim = c(0,0.1))
   b2 <- b2 + 
     stat_function(fun=hom_alt_model, n = c+1, args=list(cov=c), geom="bar", fill = brewer.pal(4, "Greys")[3]) +
-    labs(tag = "C",
+    labs(tag = "c",
          title = "known hom alt sites: ref coverage",
          x = "reads with alternative nucleotide",
          y = "fraction of sites") +
